@@ -2,6 +2,7 @@ package repository
 
 import "context"
 
+//go:generate mockery --name=FollowRepository --output=../../mocks --outpkg=mocks --case=underscore --with-expecter
 type FollowRepository interface {
 	Create(ctx context.Context, followerID, followeeID int64) error
 	Delete(ctx context.Context, followerID, followeeID int64) error
