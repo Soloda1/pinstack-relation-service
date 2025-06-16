@@ -147,7 +147,7 @@ func TestGetFolloweesHandler_GetFollowees(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to get followees",
+			expectedErrMsg: "failed to fetch followees",
 		},
 	}
 
