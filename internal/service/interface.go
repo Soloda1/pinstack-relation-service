@@ -2,6 +2,7 @@ package service
 
 import "context"
 
+//go:generate mockery --name=FollowService --output=../../mocks --outpkg=mocks --case=underscore --with-expecter
 type FollowService interface {
 	Follow(ctx context.Context, followerID, followeeID int64) error
 	Unfollow(ctx context.Context, followerID, followeeID int64) error
