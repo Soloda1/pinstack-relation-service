@@ -134,4 +134,5 @@ var (
 	ErrFollowRelationNotFound   = errors.New("follow relation not found")
 	ErrFollowRelationCreateFail = errors.New("failed to create follow relation")
 	ErrFollowRelationDeleteFail = errors.New("failed to delete follow relation")
+	ErrAlreadyFollowing         = errors.New("already following this user")
 )
