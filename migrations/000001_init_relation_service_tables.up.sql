@@ -16,7 +16,7 @@ CREATE TABLE outbox (
     aggregate_id BIGINT NOT NULL,
     event_type TEXT NOT NULL,
     payload JSONB NOT NULL,
-    status TEXT NOT NULL DEFAULT 'new',
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'pending', 'sent', 'error')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     sent_at TIMESTAMPTZ
 );
