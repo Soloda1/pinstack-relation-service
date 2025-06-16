@@ -1,12 +1,14 @@
-package repository_postgres
+package uow
 
 import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"pinstack-relation-service/internal/events/outbox"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/repository"
+	"pinstack-relation-service/internal/repository/postgres"
 )
 
 type UnitOfWork interface {
@@ -14,6 +16,7 @@ type UnitOfWork interface {
 }
 
 type Transaction interface {
+	OutboxRepository() outbox.OutboxRepository
 	FollowRepository() repository.FollowRepository
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
@@ -50,5 +53,9 @@ func (t *PostgresTransaction) Rollback(ctx context.Context) error {
 }
 
 func (t *PostgresTransaction) FollowRepository() repository.FollowRepository {
-	return NewFollowRepository(t.tx, t.log)
+	return repository_postgres.NewFollowRepository(t.tx, t.log)
+}
+
+func (t *PostgresTransaction) OutboxRepository() outbox.OutboxRepository {
+	return outbox.NewOutboxRepository(t.tx, t.log)
 }
