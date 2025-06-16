@@ -7,7 +7,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jackc/pgx/v5 v5.5.4
-	github.com/soloda1/pinstack-proto-definitions v0.1.14
+	github.com/soloda1/pinstack-proto-definitions v0.1.15
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.73.0
