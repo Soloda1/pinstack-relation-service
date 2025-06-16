@@ -348,3 +348,82 @@ func TestRepository_GetFollowees(t *testing.T) {
 		})
 	}
 }
+
+func TestRepository_Exists(t *testing.T) {
+	tests := []struct {
+		name        string
+		followerID  int64
+		followeeID  int64
+		mockSetup   func(*mocks.PgDB)
+		want        bool
+		wantErr     bool
+		expectedErr error
+	}{
+		{
+			name:       "relation exists",
+			followerID: 1,
+			followeeID: 2,
+			mockSetup: func(db *mocks.PgDB) {
+				mockRow := new(mocks.Row)
+				mockRow.On("Scan", mock.AnythingOfType("*bool")).Run(func(args mock.Arguments) {
+					arg := args.Get(0).(*bool)
+					*arg = true
+				}).Return(nil)
+				db.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(mockRow)
+			},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:       "relation does not exist",
+			followerID: 1,
+			followeeID: 3,
+			mockSetup: func(db *mocks.PgDB) {
+				mockRow := new(mocks.Row)
+				mockRow.On("Scan", mock.AnythingOfType("*bool")).Run(func(args mock.Arguments) {
+					arg := args.Get(0).(*bool)
+					*arg = false
+				}).Return(nil)
+				db.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(mockRow)
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:       "database error",
+			followerID: 1,
+			followeeID: 2,
+			mockSetup: func(db *mocks.PgDB) {
+				mockRow := new(mocks.Row)
+				mockRow.On("Scan", mock.AnythingOfType("*bool")).Return(errors.New("db error"))
+				db.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(mockRow)
+			},
+			want:        false,
+			wantErr:     true,
+			expectedErr: custom_errors.ErrDatabaseQuery,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockDB := mocks.NewPgDB(t)
+			log := logger.New("dev")
+
+			if tt.mockSetup != nil {
+				tt.mockSetup(mockDB)
+			}
+
+			repo := repository_postgres.NewFollowRepository(mockDB, log)
+			got, err := repo.Exists(context.Background(), tt.followerID, tt.followeeID)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.expectedErr != nil {
+					assert.ErrorIs(t, err, tt.expectedErr)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}

@@ -17,7 +17,7 @@ func NewFollowRepository(db PgDB, log *logger.Logger) *Repository {
 	return &Repository{db: db, log: log}
 }
 
-func (r Repository) Create(ctx context.Context, followerID, followeeID int64) error {
+func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) error {
 	r.log.Info("Creating follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	if followerID == followeeID {
@@ -52,7 +52,7 @@ func (r Repository) Create(ctx context.Context, followerID, followeeID int64) er
 	return nil
 }
 
-func (r Repository) Delete(ctx context.Context, followerID, followeeID int64) error {
+func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) error {
 	r.log.Info("Deleting follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
@@ -88,7 +88,7 @@ func (r Repository) Delete(ctx context.Context, followerID, followeeID int64) er
 	return nil
 }
 
-func (r Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64, error) {
+func (r *Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64, error) {
 	r.log.Info("Getting followers", slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
@@ -135,7 +135,7 @@ func (r Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64
 	return followers, nil
 }
 
-func (r Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64, error) {
+func (r *Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64, error) {
 	r.log.Info("Getting followees", slog.Int64("follower_id", followerID))
 
 	args := pgx.NamedArgs{
@@ -180,4 +180,39 @@ func (r Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64
 		slog.Int64("follower_id", followerID),
 		slog.Int("count", len(followees)))
 	return followees, nil
+}
+
+func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (bool, error) {
+	r.log.Info("Checking if follow relation exists",
+		slog.Int64("follower_id", followerID),
+		slog.Int64("followee_id", followeeID))
+
+	args := pgx.NamedArgs{
+		"follower_id": followerID,
+		"followee_id": followeeID,
+	}
+
+	query := `
+		SELECT EXISTS(
+			SELECT 1 
+			FROM followers 
+			WHERE follower_id = @follower_id AND followee_id = @followee_id
+		)
+	`
+
+	var exists bool
+	err := r.db.QueryRow(ctx, query, args).Scan(&exists)
+	if err != nil {
+		r.log.Error("Failed to check follow relation existence",
+			slog.Int64("follower_id", followerID),
+			slog.Int64("followee_id", followeeID),
+			slog.String("error", err.Error()))
+		return false, custom_errors.ErrDatabaseQuery
+	}
+
+	r.log.Info("Follow relation check completed",
+		slog.Int64("follower_id", followerID),
+		slog.Int64("followee_id", followeeID),
+		slog.Bool("exists", exists))
+	return exists, nil
 }
