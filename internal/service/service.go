@@ -75,7 +75,7 @@ func (s *Service) Unfollow(ctx context.Context, followerID, followeeID int64) er
 
 func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]int64, error) {
 	s.log.Info("GetFollowers request received", slog.Int64("followeeID", followeeID))
-	limit, offset := utils.SetPaginationDefaults(page, limit)
+	limit, offset := utils.SetPaginationDefaults(limit, page)
 	followers, err := s.followRepo.GetFollowers(ctx, followeeID, limit, offset)
 	if err != nil {
 		s.log.Error("Error getting followers", slog.String("error", err.Error()))
@@ -88,7 +88,7 @@ func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, pag
 
 func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, page int32) ([]int64, error) {
 	s.log.Info("GetFollowees request received", slog.Int64("followerID", followerID))
-	limit, offset := utils.SetPaginationDefaults(page, limit)
+	limit, offset := utils.SetPaginationDefaults(limit, page)
 	followees, err := s.followRepo.GetFollowees(ctx, followerID, limit, offset)
 	if err != nil {
 		s.log.Error("Error getting followees", slog.String("error", err.Error()))
