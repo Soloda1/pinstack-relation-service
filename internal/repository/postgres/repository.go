@@ -110,7 +110,7 @@ func (r Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64
 	}
 	defer rows.Close()
 
-	var followers []int64
+	followers := make([]int64, 0)
 	for rows.Next() {
 		var followerID int64
 		if err := rows.Scan(&followerID); err != nil {
@@ -157,7 +157,7 @@ func (r Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64
 	}
 	defer rows.Close()
 
-	var followees []int64
+	followees := make([]int64, 0)
 	for rows.Next() {
 		var followeeID int64
 		if err := rows.Scan(&followeeID); err != nil {
