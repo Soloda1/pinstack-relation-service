@@ -17,7 +17,7 @@ func NewFollowRepository(db PgDB, log *logger.Logger) *Repository {
 	return &Repository{db: db, log: log}
 }
 
-func (r Repository) Create(ctx context.Context, followerID, followeeID int64) error {
+func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) error {
 	r.log.Info("Creating follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	if followerID == followeeID {
@@ -52,7 +52,7 @@ func (r Repository) Create(ctx context.Context, followerID, followeeID int64) er
 	return nil
 }
 
-func (r Repository) Delete(ctx context.Context, followerID, followeeID int64) error {
+func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) error {
 	r.log.Info("Deleting follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
@@ -88,7 +88,7 @@ func (r Repository) Delete(ctx context.Context, followerID, followeeID int64) er
 	return nil
 }
 
-func (r Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64, error) {
+func (r *Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64, error) {
 	r.log.Info("Getting followers", slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
@@ -135,7 +135,7 @@ func (r Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64
 	return followers, nil
 }
 
-func (r Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64, error) {
+func (r *Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64, error) {
 	r.log.Info("Getting followees", slog.Int64("follower_id", followerID))
 
 	args := pgx.NamedArgs{
@@ -182,7 +182,7 @@ func (r Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64
 	return followees, nil
 }
 
-func (r Repository) Exists(ctx context.Context, followerID, followeeID int64) (bool, error) {
+func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (bool, error) {
 	r.log.Info("Checking if follow relation exists",
 		slog.Int64("follower_id", followerID),
 		slog.Int64("followee_id", followeeID))
