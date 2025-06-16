@@ -126,3 +126,12 @@ var (
 	ErrMediaQueryFailed      = errors.New("failed to query post media")
 	ErrMediaBatchQueryFailed = errors.New("failed to batch query posts media")
 )
+
+// Follower relation errors
+var (
+	ErrSelfFollow               = errors.New("cannot follow yourself")
+	ErrFollowRelationExists     = errors.New("follow relation already exists")
+	ErrFollowRelationNotFound   = errors.New("follow relation not found")
+	ErrFollowRelationCreateFail = errors.New("failed to create follow relation")
+	ErrFollowRelationDeleteFail = errors.New("failed to delete follow relation")
+)
