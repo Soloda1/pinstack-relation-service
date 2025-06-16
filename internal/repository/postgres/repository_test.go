@@ -3,6 +3,7 @@ package repository_postgres_test
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -188,27 +189,59 @@ func TestRepository_GetFollowers(t *testing.T) {
 	tests := []struct {
 		name        string
 		followeeID  int64
+		limit       int32
+		offset      int32
 		mockSetup   func(*mocks.PgDB)
 		want        []int64
 		wantErr     bool
 		expectedErr error
+		checkQuery  bool
 	}{
 		{
-			name:       "successful get followers",
+			name:       "successful get followers with default pagination",
 			followeeID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				rows := setupMockRows(t, []int64{2, 3, 4})
 				db.On("Query",
 					mock.Anything,
 					mock.AnythingOfType("string"),
-					mock.Anything).Return(rows, nil)
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["followee_id"] == int64(1) &&
+							args["limit"] == int32(10) &&
+							args["offset"] == int32(0)
+					})).Return(rows, nil)
 			},
-			want:    []int64{2, 3, 4},
-			wantErr: false,
+			want:       []int64{2, 3, 4},
+			wantErr:    false,
+			checkQuery: true,
+		},
+		{
+			name:       "get followers with custom pagination",
+			followeeID: 1,
+			limit:      5,
+			offset:     10,
+			mockSetup: func(db *mocks.PgDB) {
+				rows := setupMockRows(t, []int64{6, 7})
+				db.On("Query",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["followee_id"] == int64(1) &&
+							args["limit"] == int32(5) &&
+							args["offset"] == int32(10)
+					})).Return(rows, nil)
+			},
+			want:       []int64{6, 7},
+			wantErr:    false,
+			checkQuery: true,
 		},
 		{
 			name:       "empty followers list",
 			followeeID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				rows := setupMockRows(t, []int64{})
 				db.On("Query",
@@ -222,6 +255,8 @@ func TestRepository_GetFollowers(t *testing.T) {
 		{
 			name:       "database query error",
 			followeeID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				db.On("Query",
 					mock.Anything,
@@ -235,6 +270,8 @@ func TestRepository_GetFollowers(t *testing.T) {
 		{
 			name:       "scan error",
 			followeeID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				mockRows := mocks.NewRows(t)
 				mockRows.On("Next").Return(true).Once()
@@ -261,7 +298,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 			}
 
 			repo := repository_postgres.NewFollowRepository(mockDB, log)
-			got, err := repo.GetFollowers(context.Background(), tt.followeeID)
+			got, err := repo.GetFollowers(context.Background(), tt.followeeID, tt.limit, tt.offset)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
@@ -279,27 +316,59 @@ func TestRepository_GetFollowees(t *testing.T) {
 	tests := []struct {
 		name        string
 		followerID  int64
+		limit       int32
+		offset      int32
 		mockSetup   func(*mocks.PgDB)
 		want        []int64
 		wantErr     bool
 		expectedErr error
+		checkQuery  bool
 	}{
 		{
-			name:       "successful get followees",
+			name:       "successful get followees with default pagination",
 			followerID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				rows := setupMockRows(t, []int64{2, 3, 4})
 				db.On("Query",
 					mock.Anything,
 					mock.AnythingOfType("string"),
-					mock.Anything).Return(rows, nil)
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["follower_id"] == int64(1) &&
+							args["limit"] == int32(10) &&
+							args["offset"] == int32(0)
+					})).Return(rows, nil)
 			},
-			want:    []int64{2, 3, 4},
-			wantErr: false,
+			want:       []int64{2, 3, 4},
+			wantErr:    false,
+			checkQuery: true,
+		},
+		{
+			name:       "get followees with custom pagination",
+			followerID: 1,
+			limit:      5,
+			offset:     10,
+			mockSetup: func(db *mocks.PgDB) {
+				rows := setupMockRows(t, []int64{8, 9})
+				db.On("Query",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["follower_id"] == int64(1) &&
+							args["limit"] == int32(5) &&
+							args["offset"] == int32(10)
+					})).Return(rows, nil)
+			},
+			want:       []int64{8, 9},
+			wantErr:    false,
+			checkQuery: true,
 		},
 		{
 			name:       "empty followees list",
 			followerID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				rows := setupMockRows(t, []int64{})
 				db.On("Query",
@@ -313,6 +382,8 @@ func TestRepository_GetFollowees(t *testing.T) {
 		{
 			name:       "database query error",
 			followerID: 1,
+			limit:      10,
+			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
 				db.On("Query",
 					mock.Anything,
@@ -335,7 +406,7 @@ func TestRepository_GetFollowees(t *testing.T) {
 			}
 
 			repo := repository_postgres.NewFollowRepository(mockDB, log)
-			got, err := repo.GetFollowees(context.Background(), tt.followerID)
+			got, err := repo.GetFollowees(context.Background(), tt.followerID, tt.limit, tt.offset)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {

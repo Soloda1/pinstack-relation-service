@@ -6,6 +6,7 @@ import (
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/repository"
+	"pinstack-relation-service/internal/utils"
 )
 
 type Service struct {
@@ -72,10 +73,10 @@ func (s *Service) Unfollow(ctx context.Context, followerID, followeeID int64) er
 	return nil
 }
 
-func (s *Service) GetFollowers(ctx context.Context, followeeID int64) ([]int64, error) {
+func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]int64, error) {
 	s.log.Info("GetFollowers request received", slog.Int64("followeeID", followeeID))
-
-	followers, err := s.followRepo.GetFollowers(ctx, followeeID)
+	limit, offset := utils.SetPaginationDefaults(limit, page)
+	followers, err := s.followRepo.GetFollowers(ctx, followeeID, limit, offset)
 	if err != nil {
 		s.log.Error("Error getting followers", slog.String("error", err.Error()))
 		return nil, err
@@ -85,10 +86,10 @@ func (s *Service) GetFollowers(ctx context.Context, followeeID int64) ([]int64, 
 	return followers, nil
 }
 
-func (s *Service) GetFollowees(ctx context.Context, followerID int64) ([]int64, error) {
+func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, page int32) ([]int64, error) {
 	s.log.Info("GetFollowees request received", slog.Int64("followerID", followerID))
-
-	followees, err := s.followRepo.GetFollowees(ctx, followerID)
+	limit, offset := utils.SetPaginationDefaults(limit, page)
+	followees, err := s.followRepo.GetFollowees(ctx, followerID, limit, offset)
 	if err != nil {
 		s.log.Error("Error getting followees", slog.String("error", err.Error()))
 		return nil, err

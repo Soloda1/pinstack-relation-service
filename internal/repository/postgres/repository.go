@@ -88,17 +88,21 @@ func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) e
 	return nil
 }
 
-func (r *Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int64, error) {
+func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, offset int32) ([]int64, error) {
 	r.log.Info("Getting followers", slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
 		"followee_id": followeeID,
+		"limit":       limit,
+		"offset":      offset,
 	}
 
 	query := `
 		SELECT follower_id 
 		FROM followers 
 		WHERE followee_id = @followee_id
+		ORDER BY created_at DESC
+		LIMIT @limit OFFSET @offset
 	`
 
 	rows, err := r.db.Query(ctx, query, args)
@@ -135,17 +139,21 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64) ([]int6
 	return followers, nil
 }
 
-func (r *Repository) GetFollowees(ctx context.Context, followerID int64) ([]int64, error) {
+func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, offset int32) ([]int64, error) {
 	r.log.Info("Getting followees", slog.Int64("follower_id", followerID))
 
 	args := pgx.NamedArgs{
 		"follower_id": followerID,
+		"limit":       limit,
+		"offset":      offset,
 	}
 
 	query := `
 		SELECT followee_id 
 		FROM followers 
 		WHERE follower_id = @follower_id
+		ORDER BY created_at DESC
+		LIMIT @limit OFFSET @offset
 	`
 
 	rows, err := r.db.Query(ctx, query, args)
