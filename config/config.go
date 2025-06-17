@@ -11,11 +11,17 @@ type Config struct {
 	GRPCServer  GRPCServer
 	Database    Database
 	UserService UserService
+	EventTypes  EventTypes
 }
 
 type GRPCServer struct {
 	Address string
 	Port    int
+}
+
+type EventTypes struct {
+	FollowCreated string
+	FollowDeleted string
 }
 
 type Database struct {
@@ -49,6 +55,9 @@ func MustLoad() *Config {
 	viper.SetDefault("database.db_name", "relationservice")
 	viper.SetDefault("database.migrations_path", "migrations")
 
+	viper.SetDefault("event_types.follow_created", "follow_created")
+	viper.SetDefault("event_types.follow_deleted", "follow_deleted")
+
 	viper.SetDefault("user_service.address", "user-service")
 	viper.SetDefault("user_service.port", 50051)
 
@@ -74,6 +83,10 @@ func MustLoad() *Config {
 		UserService: UserService{
 			Address: viper.GetString("user_service.address"),
 			Port:    viper.GetInt("user_service.port"),
+		},
+		EventTypes: EventTypes{
+			FollowCreated: viper.GetString("event_types.follow_created"),
+			FollowDeleted: viper.GetString("event_types.follow_deleted"),
 		},
 	}
 
