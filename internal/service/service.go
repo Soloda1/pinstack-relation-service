@@ -76,7 +76,7 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) erro
 	event := model.OutboxEvent{
 		EventType:   model.EventTypeFollowCreated,
 		Payload:     payload,
-		AggregateID: follower.FollowerID,
+		AggregateID: follower.ID,
 	}
 
 	err = outboxRepo.AddEvent(ctx, event)
