@@ -1,4 +1,4 @@
-package grpc_test
+package follow_grpc_test
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"pinstack-relation-service/internal/custom_errors"
-	"pinstack-relation-service/internal/delivery/grpc"
 	"pinstack-relation-service/mocks"
 )
 
