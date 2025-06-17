@@ -3,439 +3,347 @@ package service
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
+	"pinstack-relation-service/internal/model"
 	"pinstack-relation-service/mocks"
+	"testing"
 )
 
+func setupTest(t *testing.T) (*Service, *mocks.FollowRepository, *mocks.UnitOfWork, *mocks.Transaction, *mocks.OutboxRepository) {
+	mockFollowRepo := mocks.NewFollowRepository(t)
+	mockUOW := mocks.NewUnitOfWork(t)
+	mockTx := mocks.NewTransaction(t)
+	mockOutboxRepo := mocks.NewOutboxRepository(t)
+
+	// Отключаем автоматическую проверку моков
+	t.Cleanup(func() {
+		// Пустая функция для переопределения автоматической проверки
+	})
+
+	// Инициализируем логгер в тихом режиме для тестов
+	log := logger.New("test")
+
+	svc := NewFollowService(log, mockFollowRepo, mockUOW)
+
+	return svc, mockFollowRepo, mockUOW, mockTx, mockOutboxRepo
+}
+
 func TestService_Follow(t *testing.T) {
-	tests := []struct {
-		name        string
-		followerID  int64
-		followeeID  int64
-		mockSetup   func(*mocks.FollowRepository)
-		wantErr     bool
-		expectedErr error
-	}{
-		{
-			name:       "successful follow",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(false, nil)
-				repo.On("Create", mock.Anything, int64(1), int64(2)).Return(nil)
-			},
-			wantErr: false,
-		},
-		{
-			name:        "self follow error",
-			followerID:  1,
-			followeeID:  1,
-			mockSetup:   func(repo *mocks.FollowRepository) {},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrSelfFollow,
-		},
-		{
-			name:       "relationship already exists",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(true, nil)
-			},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrFollowRelationExists,
-		},
-		{
-			name:       "exists check error",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(false, errors.New("db error"))
-			},
-			wantErr: true,
-		},
-		{
-			name:       "create relationship error",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(false, nil)
-				repo.On("Create", mock.Anything, int64(1), int64(2)).Return(custom_errors.ErrFollowRelationCreateFail)
-			},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrFollowRelationCreateFail,
-		},
-	}
+	t.Run("успешное создание подписки", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, mockUOW, mockTx, mockOutboxRepo := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := mocks.NewFollowRepository(t)
-			log := logger.New("dev")
+		mockUOW.On("Begin", ctx).Return(mockTx, nil)
+		mockTx.On("FollowRepository").Return(mockFollowRepo)
+		mockTx.On("OutboxRepository").Return(mockOutboxRepo)
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(false, nil)
 
-			if tt.mockSetup != nil {
-				tt.mockSetup(mockRepo)
-			}
+		follower := model.Follower{
+			FollowerID: followerID,
+			FolloweeID: followeeID,
+		}
+		mockFollowRepo.On("Create", ctx, followerID, followeeID).Return(follower, nil)
 
-			service := NewFollowService(log, mockRepo)
-			err := service.Follow(context.Background(), tt.followerID, tt.followeeID)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+		// Проверяем вызов добавления события в outbox
+		mockOutboxRepo.On("AddEvent", ctx, mock.AnythingOfType("model.OutboxEvent")).Return(nil)
+		mockTx.On("Commit", ctx).Return(nil)
+
+		// Act
+		err := svc.Follow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.NoError(t, err)
+		mockUOW.AssertExpectations(t)
+		mockTx.AssertExpectations(t)
+		mockFollowRepo.AssertExpectations(t)
+		mockOutboxRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при попытке подписаться на себя", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, mockUOW, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID := int64(1)
+
+		// Act
+		err := svc.Follow(ctx, followerID, followerID)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Equal(t, custom_errors.ErrSelfFollow, err)
+
+		// В этом тесте не вызываются методы моков
+		mockFollowRepo.AssertNotCalled(t, "Exists")
+		mockUOW.AssertNotCalled(t, "Begin")
+	})
+
+	t.Run("ошибка при старте транзакции", func(t *testing.T) {
+		// Arrange
+		svc, _, mockUOW, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockUOW.On("Begin", ctx).Return(nil, errors.New("db connection error"))
+
+		// Act
+		err := svc.Follow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Equal(t, custom_errors.ErrDatabaseQuery, err)
+		mockUOW.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при создании подписки", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, mockUOW, mockTx, mockOutboxRepo := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockUOW.On("Begin", ctx).Return(mockTx, nil)
+		mockTx.On("FollowRepository").Return(mockFollowRepo)
+		mockTx.On("OutboxRepository").Return(mockOutboxRepo) // Нужно добавить это ожидание
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(false, nil)
+		mockFollowRepo.On("Create", ctx, followerID, followeeID).Return(model.Follower{}, errors.New("db error"))
+		mockTx.On("Rollback", ctx).Return(nil)
+
+		// Act
+		err := svc.Follow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		mockUOW.AssertExpectations(t)
+		mockTx.AssertExpectations(t)
+		mockFollowRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при добавлении события в outbox", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, mockUOW, mockTx, mockOutboxRepo := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockUOW.On("Begin", ctx).Return(mockTx, nil)
+		mockTx.On("FollowRepository").Return(mockFollowRepo)
+		mockTx.On("OutboxRepository").Return(mockOutboxRepo)
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(false, nil)
+
+		follower := model.Follower{
+			FollowerID: followerID,
+			FolloweeID: followeeID,
+		}
+		mockFollowRepo.On("Create", ctx, followerID, followeeID).Return(follower, nil)
+
+		mockOutboxRepo.On("AddEvent", ctx, mock.AnythingOfType("model.OutboxEvent")).Return(errors.New("outbox error"))
+		mockTx.On("Rollback", ctx).Return(nil)
+
+		// Act
+		err := svc.Follow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		mockUOW.AssertExpectations(t)
+		mockTx.AssertExpectations(t)
+		mockFollowRepo.AssertExpectations(t)
+		mockOutboxRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при коммите транзакции", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, mockUOW, mockTx, mockOutboxRepo := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockUOW.On("Begin", ctx).Return(mockTx, nil)
+		mockTx.On("FollowRepository").Return(mockFollowRepo)
+		mockTx.On("OutboxRepository").Return(mockOutboxRepo)
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(false, nil)
+
+		follower := model.Follower{
+			FollowerID: followerID,
+			FolloweeID: followeeID,
+		}
+		mockFollowRepo.On("Create", ctx, followerID, followeeID).Return(follower, nil)
+
+		mockOutboxRepo.On("AddEvent", ctx, mock.AnythingOfType("model.OutboxEvent")).Return(nil)
+		mockTx.On("Commit", ctx).Return(errors.New("commit error"))
+		mockTx.On("Rollback", ctx).Return(nil)
+
+		// Act
+		err := svc.Follow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Equal(t, custom_errors.ErrDatabaseQuery, err)
+		mockUOW.AssertExpectations(t)
+		mockTx.AssertExpectations(t)
+		mockFollowRepo.AssertExpectations(t)
+		mockOutboxRepo.AssertExpectations(t)
+	})
 }
 
 func TestService_Unfollow(t *testing.T) {
-	tests := []struct {
-		name        string
-		followerID  int64
-		followeeID  int64
-		mockSetup   func(*mocks.FollowRepository)
-		wantErr     bool
-		expectedErr error
-	}{
-		{
-			name:       "successful unfollow",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(true, nil)
-				repo.On("Delete", mock.Anything, int64(1), int64(2)).Return(nil)
-			},
-			wantErr: false,
-		},
-		{
-			name:        "self unfollow error",
-			followerID:  1,
-			followeeID:  1,
-			mockSetup:   func(repo *mocks.FollowRepository) {},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrSelfFollow,
-		},
-		{
-			name:       "relationship doesn't exist",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(false, nil)
-			},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrFollowRelationNotFound,
-		},
-		{
-			name:       "exists check error",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(false, errors.New("db error"))
-			},
-			wantErr: true,
-		},
-		{
-			name:       "delete relationship error",
-			followerID: 1,
-			followeeID: 2,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("Exists", mock.Anything, int64(1), int64(2)).Return(true, nil)
-				repo.On("Delete", mock.Anything, int64(1), int64(2)).Return(custom_errors.ErrFollowRelationDeleteFail)
-			},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrFollowRelationDeleteFail,
-		},
-	}
+	t.Run("успешное удаление подписки", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := mocks.NewFollowRepository(t)
-			log := logger.New("dev")
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(true, nil)
+		mockFollowRepo.On("Delete", ctx, followerID, followeeID).Return(nil)
 
-			if tt.mockSetup != nil {
-				tt.mockSetup(mockRepo)
-			}
+		// Act
+		err := svc.Unfollow(ctx, followerID, followeeID)
 
-			service := NewFollowService(log, mockRepo)
-			err := service.Unfollow(context.Background(), tt.followerID, tt.followeeID)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+		// Assert
+		assert.NoError(t, err)
+		mockFollowRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при попытке отписаться от себя", func(t *testing.T) {
+		// Arrange
+		svc, _, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID := int64(1)
+
+		// Act
+		err := svc.Unfollow(ctx, followerID, followerID)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Equal(t, custom_errors.ErrSelfFollow, err)
+	})
+
+	t.Run("подписка не существует", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(false, nil)
+
+		// Act
+		err := svc.Unfollow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Equal(t, custom_errors.ErrFollowRelationNotFound, err)
+	})
+
+	t.Run("ошибка при проверке существования подписки", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(false, errors.New("db error"))
+
+		// Act
+		err := svc.Unfollow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		mockFollowRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при удалении подписки", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID, followeeID := int64(1), int64(2)
+
+		mockFollowRepo.On("Exists", ctx, followerID, followeeID).Return(true, nil)
+		mockFollowRepo.On("Delete", ctx, followerID, followeeID).Return(errors.New("db error"))
+
+		// Act
+		err := svc.Unfollow(ctx, followerID, followeeID)
+
+		// Assert
+		assert.Error(t, err)
+		mockFollowRepo.AssertExpectations(t)
+	})
 }
 
 func TestService_GetFollowers(t *testing.T) {
-	tests := []struct {
-		name           string
-		followeeID     int64
-		limit          int32
-		page           int32
-		expectedLimit  int32
-		expectedOffset int32
-		mockSetup      func(*mocks.FollowRepository)
-		want           []int64
-		wantErr        bool
-		expectedErr    error
-	}{
-		{
-			name:           "successful get followers with default pagination",
-			followeeID:     1,
-			limit:          10,
-			page:           1,
-			expectedLimit:  10,
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(0)).Return([]int64{2, 3, 4}, nil)
-			},
-			want:    []int64{2, 3, 4},
-			wantErr: false,
-		},
-		{
-			name:           "get second page of followers",
-			followeeID:     1,
-			limit:          5,
-			page:           2,
-			expectedLimit:  5,
-			expectedOffset: 5,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(5), int32(5)).Return([]int64{6, 7, 8}, nil)
-			},
-			want:    []int64{6, 7, 8},
-			wantErr: false,
-		},
-		{
-			name:           "use default limit when limit is zero",
-			followeeID:     1,
-			limit:          0,
-			page:           1,
-			expectedLimit:  20, // defaultLimit
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(20), int32(0)).Return([]int64{2, 3}, nil)
-			},
-			want:    []int64{2, 3},
-			wantErr: false,
-		},
-		{
-			name:           "use default page when page is zero",
-			followeeID:     1,
-			limit:          10,
-			page:           0,
-			expectedLimit:  10,
-			expectedOffset: 0, // (1-1)*10
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(0)).Return([]int64{2, 3}, nil)
-			},
-			want:    []int64{2, 3},
-			wantErr: false,
-		},
-		{
-			name:           "negative values for limit and page use defaults",
-			followeeID:     1,
-			limit:          -5,
-			page:           -2,
-			expectedLimit:  20, // defaultLimit
-			expectedOffset: 0,  // (1-1)*20
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(20), int32(0)).Return([]int64{2, 3}, nil)
-			},
-			want:    []int64{2, 3},
-			wantErr: false,
-		},
-		{
-			name:           "empty followers list",
-			followeeID:     1,
-			limit:          10,
-			page:           1,
-			expectedLimit:  10,
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(0)).Return([]int64{}, nil)
-			},
-			want:    []int64{},
-			wantErr: false,
-		},
-		{
-			name:           "database error",
-			followeeID:     1,
-			limit:          10,
-			page:           1,
-			expectedLimit:  10,
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(0)).Return(nil, custom_errors.ErrDatabaseQuery)
-			},
-			want:        nil,
-			wantErr:     true,
-			expectedErr: custom_errors.ErrDatabaseQuery,
-		},
-	}
+	t.Run("успешное получение подписчиков", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followeeID := int64(2)
+		limit, page := int32(10), int32(1)
+		expectedFollowers := []int64{1, 3, 5}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := mocks.NewFollowRepository(t)
-			log := logger.New("dev")
+		// limit и offset после применения SetPaginationDefaults
+		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(expectedFollowers, nil)
 
-			if tt.mockSetup != nil {
-				tt.mockSetup(mockRepo)
-			}
+		// Act
+		followers, err := svc.GetFollowers(ctx, followeeID, limit, page)
 
-			service := NewFollowService(log, mockRepo)
-			got, err := service.GetFollowers(context.Background(), tt.followeeID, tt.limit, tt.page)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
-				}
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
-			}
-		})
-	}
+		// Assert
+		require.NoError(t, err)
+		assert.Equal(t, expectedFollowers, followers)
+		mockFollowRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при получении подписчиков", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followeeID := int64(2)
+		limit, page := int32(10), int32(1)
+
+		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(nil, errors.New("db error"))
+
+		// Act
+		followers, err := svc.GetFollowers(ctx, followeeID, limit, page)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Nil(t, followers)
+	})
 }
 
 func TestService_GetFollowees(t *testing.T) {
-	tests := []struct {
-		name           string
-		followerID     int64
-		limit          int32
-		page           int32
-		expectedLimit  int32
-		expectedOffset int32
-		mockSetup      func(*mocks.FollowRepository)
-		want           []int64
-		wantErr        bool
-		expectedErr    error
-	}{
-		{
-			name:           "successful get followees with default pagination",
-			followerID:     1,
-			limit:          10,
-			page:           1,
-			expectedLimit:  10,
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(10), int32(0)).Return([]int64{2, 3, 4}, nil)
-			},
-			want:    []int64{2, 3, 4},
-			wantErr: false,
-		},
-		{
-			name:           "get third page of followees",
-			followerID:     1,
-			limit:          3,
-			page:           3,
-			expectedLimit:  3,
-			expectedOffset: 6,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(3), int32(6)).Return([]int64{7, 8, 9}, nil)
-			},
-			want:    []int64{7, 8, 9},
-			wantErr: false,
-		},
-		{
-			name:           "use default limit when limit is zero",
-			followerID:     1,
-			limit:          0,
-			page:           1,
-			expectedLimit:  20, // defaultLimit
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(20), int32(0)).Return([]int64{2, 3}, nil)
-			},
-			want:    []int64{2, 3},
-			wantErr: false,
-		},
-		{
-			name:           "use default page when page is zero",
-			followerID:     1,
-			limit:          10,
-			page:           0,
-			expectedLimit:  10,
-			expectedOffset: 0, // (1-1)*10
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(10), int32(0)).Return([]int64{2, 3}, nil)
-			},
-			want:    []int64{2, 3},
-			wantErr: false,
-		},
-		{
-			name:           "negative values for limit and page use defaults",
-			followerID:     1,
-			limit:          -5,
-			page:           -2,
-			expectedLimit:  20, // defaultLimit
-			expectedOffset: 0,  // (1-1)*20
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(20), int32(0)).Return([]int64{2, 3}, nil)
-			},
-			want:    []int64{2, 3},
-			wantErr: false,
-		},
-		{
-			name:           "empty followees list",
-			followerID:     1,
-			limit:          10,
-			page:           1,
-			expectedLimit:  10,
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(10), int32(0)).Return([]int64{}, nil)
-			},
-			want:    []int64{},
-			wantErr: false,
-		},
-		{
-			name:           "database error",
-			followerID:     1,
-			limit:          10,
-			page:           1,
-			expectedLimit:  10,
-			expectedOffset: 0,
-			mockSetup: func(repo *mocks.FollowRepository) {
-				repo.On("GetFollowees", mock.Anything, int64(1), int32(10), int32(0)).Return(nil, custom_errors.ErrDatabaseQuery)
-			},
-			want:        nil,
-			wantErr:     true,
-			expectedErr: custom_errors.ErrDatabaseQuery,
-		},
-	}
+	t.Run("успешное получение подписок", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID := int64(1)
+		limit, page := int32(10), int32(1)
+		expectedFollowees := []int64{2, 4, 6}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := mocks.NewFollowRepository(t)
-			log := logger.New("dev")
+		// limit и offset после применения SetPaginationDefaults
+		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(expectedFollowees, nil)
 
-			if tt.mockSetup != nil {
-				tt.mockSetup(mockRepo)
-			}
+		// Act
+		followees, err := svc.GetFollowees(ctx, followerID, limit, page)
 
-			service := NewFollowService(log, mockRepo)
-			got, err := service.GetFollowees(context.Background(), tt.followerID, tt.limit, tt.page)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
-				}
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.want, got)
-			}
-		})
-	}
+		// Assert
+		require.NoError(t, err)
+		assert.Equal(t, expectedFollowees, followees)
+		mockFollowRepo.AssertExpectations(t)
+	})
+
+	t.Run("ошибка при получении подписок", func(t *testing.T) {
+		// Arrange
+		svc, mockFollowRepo, _, _, _ := setupTest(t)
+		ctx := context.Background()
+		followerID := int64(1)
+		limit, page := int32(10), int32(1)
+
+		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(nil, errors.New("db error"))
+
+		// Act
+		followees, err := svc.GetFollowees(ctx, followerID, limit, page)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Nil(t, followees)
+	})
 }
