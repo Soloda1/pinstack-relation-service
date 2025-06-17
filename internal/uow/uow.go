@@ -11,17 +11,6 @@ import (
 	"pinstack-relation-service/internal/repository/postgres"
 )
 
-type UnitOfWork interface {
-	Begin(ctx context.Context) (Transaction, error)
-}
-
-type Transaction interface {
-	OutboxRepository() outbox.OutboxRepository
-	FollowRepository() repository.FollowRepository
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
-}
-
 type PostgresUnitOfWork struct {
 	pool *pgxpool.Pool
 	log  *logger.Logger
