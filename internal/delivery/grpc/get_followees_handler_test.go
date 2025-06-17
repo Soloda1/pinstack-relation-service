@@ -1,8 +1,9 @@
-package grpc_test
+package follow_grpc_test
 
 import (
 	"context"
 	"errors"
+	follow_grpc "pinstack-relation-service/internal/delivery/grpc"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -14,7 +15,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"pinstack-relation-service/internal/custom_errors"
-	"pinstack-relation-service/internal/delivery/grpc"
 	"pinstack-relation-service/mocks"
 )
 
@@ -160,7 +160,7 @@ func TestGetFolloweesHandler_GetFollowees(t *testing.T) {
 				tt.mockSetup(mockService)
 			}
 
-			handler := grpc.NewGetFolloweesHandler(mockService, validate)
+			handler := follow_grpc.NewGetFolloweesHandler(mockService, validate)
 			resp, err := handler.GetFollowees(context.Background(), tt.req)
 
 			if tt.wantErr {

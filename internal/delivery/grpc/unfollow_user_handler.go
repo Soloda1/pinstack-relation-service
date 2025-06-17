@@ -1,4 +1,4 @@
-package grpc
+package follow_grpc
 
 import (
 	"context"

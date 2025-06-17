@@ -4,6 +4,7 @@ package mocks
 
 import (
 	context "context"
+	model "pinstack-relation-service/internal/model"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -22,21 +23,31 @@ func (_m *FollowRepository) EXPECT() *FollowRepository_Expecter {
 }
 
 // Create provides a mock function with given fields: ctx, followerID, followeeID
-func (_m *FollowRepository) Create(ctx context.Context, followerID int64, followeeID int64) error {
+func (_m *FollowRepository) Create(ctx context.Context, followerID int64, followeeID int64) (model.Follower, error) {
 	ret := _m.Called(ctx, followerID, followeeID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int64) error); ok {
+	var r0 model.Follower
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int64) (model.Follower, error)); ok {
+		return rf(ctx, followerID, followeeID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int64) model.Follower); ok {
 		r0 = rf(ctx, followerID, followeeID)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(model.Follower)
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int64) error); ok {
+		r1 = rf(ctx, followerID, followeeID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // FollowRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
@@ -59,12 +70,12 @@ func (_c *FollowRepository_Create_Call) Run(run func(ctx context.Context, follow
 	return _c
 }
 
-func (_c *FollowRepository_Create_Call) Return(_a0 error) *FollowRepository_Create_Call {
-	_c.Call.Return(_a0)
+func (_c *FollowRepository_Create_Call) Return(_a0 model.Follower, _a1 error) *FollowRepository_Create_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *FollowRepository_Create_Call) RunAndReturn(run func(context.Context, int64, int64) error) *FollowRepository_Create_Call {
+func (_c *FollowRepository_Create_Call) RunAndReturn(run func(context.Context, int64, int64) (model.Follower, error)) *FollowRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }

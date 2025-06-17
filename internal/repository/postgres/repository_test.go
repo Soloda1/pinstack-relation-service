@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,7 @@ import (
 
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
+	"pinstack-relation-service/internal/model"
 	repository_postgres "pinstack-relation-service/internal/repository/postgres"
 	"pinstack-relation-service/mocks"
 )
@@ -48,45 +50,81 @@ func setupMockRows(t *testing.T, ids []int64) *mocks.Rows {
 
 func TestRepository_Create(t *testing.T) {
 	tests := []struct {
-		name        string
-		followerID  int64
-		followeeID  int64
-		mockSetup   func(*mocks.PgDB)
-		wantErr     bool
-		expectedErr error
+		name           string
+		followerID     int64
+		followeeID     int64
+		mockSetup      func(*mocks.PgDB)
+		wantErr        bool
+		expectedErr    error
+		expectedResult model.Follower
 	}{
 		{
 			name:       "successful follow",
 			followerID: 1,
 			followeeID: 2,
 			mockSetup: func(db *mocks.PgDB) {
-				db.On("Exec",
+				mockRow := new(mocks.Row)
+				mockRow.On("Scan",
+					mock.AnythingOfType("*int64"),
+					mock.AnythingOfType("*int64"),
+					mock.AnythingOfType("*int64"),
+					mock.AnythingOfType("*time.Time")).
+					Run(func(args mock.Arguments) {
+						idArg := args.Get(0).(*int64)
+						followerIDArg := args.Get(1).(*int64)
+						followeeIDArg := args.Get(2).(*int64)
+						createdAtArg := args.Get(3).(*time.Time)
+
+						*idArg = 1
+						*followerIDArg = 1
+						*followeeIDArg = 2
+						*createdAtArg = time.Date(2025, 6, 16, 12, 0, 0, 0, time.UTC)
+					}).
+					Return(nil)
+
+				db.On("QueryRow",
 					mock.Anything,
 					mock.AnythingOfType("string"),
-					mock.Anything).Return(createSuccessCommandTag(), nil)
+					mock.Anything).Return(mockRow)
 			},
 			wantErr: false,
+			expectedResult: model.Follower{
+				ID:         1,
+				FollowerID: 1,
+				FolloweeID: 2,
+				CreatedAt:  time.Date(2025, 6, 16, 12, 0, 0, 0, time.UTC),
+			},
 		},
 		{
-			name:        "self follow error",
-			followerID:  1,
-			followeeID:  1,
-			mockSetup:   func(db *mocks.PgDB) {},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrSelfFollow,
+			name:           "self follow error",
+			followerID:     1,
+			followeeID:     1,
+			mockSetup:      func(db *mocks.PgDB) {},
+			wantErr:        true,
+			expectedErr:    custom_errors.ErrSelfFollow,
+			expectedResult: model.Follower{},
 		},
 		{
 			name:       "database error",
 			followerID: 1,
 			followeeID: 2,
 			mockSetup: func(db *mocks.PgDB) {
-				db.On("Exec",
+				mockRow := new(mocks.Row)
+				mockRow.On("Scan",
+					mock.AnythingOfType("*int64"),
+					mock.AnythingOfType("*int64"),
+					mock.AnythingOfType("*int64"),
+					mock.AnythingOfType("*time.Time")).
+					Return(errors.New("db error"))
+
+				db.On("QueryRow",
 					mock.Anything,
 					mock.AnythingOfType("string"),
-					mock.Anything).Return(pgconn.CommandTag{}, errors.New("db error"))
+					mock.Anything).Return(mockRow)
 			},
-			wantErr:     true,
-			expectedErr: custom_errors.ErrFollowRelationCreateFail,
+			wantErr:        true,
+			expectedErr:    custom_errors.ErrFollowRelationCreateFail,
+			expectedResult: model.Follower{},
 		},
 	}
 
@@ -100,14 +138,20 @@ func TestRepository_Create(t *testing.T) {
 			}
 
 			repo := repository_postgres.NewFollowRepository(mockDB, log)
-			err := repo.Create(context.Background(), tt.followerID, tt.followeeID)
+			result, err := repo.Create(context.Background(), tt.followerID, tt.followeeID)
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
 					assert.ErrorIs(t, err, tt.expectedErr)
 				}
+				assert.Empty(t, result)
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult.ID, result.ID)
+				assert.Equal(t, tt.expectedResult.FollowerID, result.FollowerID)
+				assert.Equal(t, tt.expectedResult.FolloweeID, result.FolloweeID)
+				assert.Equal(t, tt.expectedResult.CreatedAt, result.CreatedAt)
 			}
 		})
 	}

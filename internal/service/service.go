@@ -2,22 +2,28 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
+	"pinstack-relation-service/internal/model"
 	"pinstack-relation-service/internal/repository"
+	"pinstack-relation-service/internal/uow"
 	"pinstack-relation-service/internal/utils"
+	"time"
 )
 
 type Service struct {
 	followRepo repository.FollowRepository
+	uow        uow.UnitOfWork
 	log        *logger.Logger
 }
 
-func NewFollowService(log *logger.Logger, followRepo repository.FollowRepository) *Service {
+func NewFollowService(log *logger.Logger, followRepo repository.FollowRepository, uow uow.UnitOfWork) *Service {
 	return &Service{
 		log:        log,
 		followRepo: followRepo,
+		uow:        uow,
 	}
 }
 
@@ -28,7 +34,21 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) erro
 		return custom_errors.ErrSelfFollow
 	}
 
-	exists, err := s.followRepo.Exists(ctx, followerID, followeeID)
+	tx, err := s.uow.Begin(ctx)
+	if err != nil {
+		s.log.Error("Failed to start transaction", slog.String("error", err.Error()))
+		return custom_errors.ErrDatabaseQuery
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	followRepo := tx.FollowRepository()
+	outboxRepo := tx.OutboxRepository()
+
+	exists, err := followRepo.Exists(ctx, followerID, followeeID)
 	if err != nil {
 		s.log.Error("Error checking follow existence", slog.String("error", err.Error()))
 		return err
@@ -37,10 +57,38 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) erro
 		return custom_errors.ErrFollowRelationExists
 	}
 
-	err = s.followRepo.Create(ctx, followerID, followeeID)
+	follower, err := followRepo.Create(ctx, followerID, followeeID)
 	if err != nil {
 		s.log.Error("Error creating follow relationship", slog.String("error", err.Error()))
 		return err
+	}
+
+	payload, err := json.Marshal(model.FollowCreatedPayload{
+		FollowerID:  follower.FollowerID,
+		FolloweeID:  follower.FolloweeID,
+		Timestamptz: time.Now(),
+	})
+	if err != nil {
+		s.log.Error("Failed to marshal payload", slog.String("error", err.Error()))
+		return err
+	}
+
+	event := model.OutboxEvent{
+		EventType:   model.EventTypeFollowCreated,
+		Payload:     payload,
+		AggregateID: follower.ID,
+	}
+
+	err = outboxRepo.AddEvent(ctx, event)
+	if err != nil {
+		s.log.Error("Error adding event to outbox", slog.String("error", err.Error()))
+		return err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		s.log.Error("Failed to commit transaction", slog.String("error", err.Error()))
+		return custom_errors.ErrDatabaseQuery
 	}
 
 	s.log.Info("Follow relationship created successfully", slog.Int64("followerID", followerID), slog.Int64("followeeID", followeeID))

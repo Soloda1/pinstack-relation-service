@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
+	"pinstack-relation-service/internal/model"
 )
 
 type Repository struct {
@@ -17,13 +18,13 @@ func NewFollowRepository(db PgDB, log *logger.Logger) *Repository {
 	return &Repository{db: db, log: log}
 }
 
-func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) error {
+func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) (model.Follower, error) {
 	r.log.Info("Creating follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	if followerID == followeeID {
 		r.log.Error("Attempt to follow yourself",
 			slog.Int64("user_id", followerID))
-		return custom_errors.ErrSelfFollow
+		return model.Follower{}, custom_errors.ErrSelfFollow
 	}
 
 	args := pgx.NamedArgs{
@@ -35,21 +36,23 @@ func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) e
 		INSERT INTO followers (follower_id, followee_id, created_at)
 		VALUES (@follower_id, @followee_id, NOW())
 		ON CONFLICT (follower_id, followee_id) DO NOTHING
+		RETURNING id, follower_id, followee_id, created_at
 	`
 
-	_, err := r.db.Exec(ctx, query, args)
+	var follower model.Follower
+	err := r.db.QueryRow(ctx, query, args).Scan(&follower.ID, &follower.FollowerID, &follower.FolloweeID, &follower.CreatedAt)
 	if err != nil {
 		r.log.Error("Failed to create follow relation",
 			slog.Int64("follower_id", followerID),
 			slog.Int64("followee_id", followeeID),
 			slog.String("error", err.Error()))
-		return custom_errors.ErrFollowRelationCreateFail
+		return model.Follower{}, custom_errors.ErrFollowRelationCreateFail
 	}
 
 	r.log.Info("Follow relation created successfully",
 		slog.Int64("follower_id", followerID),
 		slog.Int64("followee_id", followeeID))
-	return nil
+	return follower, nil
 }
 
 func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) error {
