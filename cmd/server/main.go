@@ -60,7 +60,7 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 	log.Info("Shutting down gRPC server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := grpcServer.Shutdown(); err != nil {
 		log.Error("gRPC server shutdown error", slog.String("error", err.Error()))
