@@ -3,6 +3,7 @@ package follow_grpc_test
 import (
 	"context"
 	"errors"
+	follow_grpc "pinstack-relation-service/internal/delivery/grpc"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -146,7 +147,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 				tt.mockSetup(mockService)
 			}
 
-			handler := grpc.NewUnfollowHandler(mockService, validate)
+			handler := follow_grpc.NewUnfollowHandler(mockService, validate)
 			resp, err := handler.Unfollow(context.Background(), tt.req)
 
 			if tt.wantErr {
