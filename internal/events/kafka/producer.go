@@ -58,7 +58,7 @@ func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) err
 			Topic:     &p.topic,
 			Partition: kafka.PartitionAny,
 		},
-		Key:   []byte(event.EventType), // Используем тип события как ключ
+		Key:   []byte(event.EventType),
 		Value: payload,
 		Headers: []kafka.Header{
 			{
@@ -107,9 +107,7 @@ func (p *Producer) handleDeliveryReports() {
 	}
 }
 
-// Close закрывает соединение с Kafka
 func (p *Producer) Close() {
-	// Ожидаем отправки всех сообщений
 	remainingMessages := p.producer.Flush(10000) // Таймаут в мс
 	if remainingMessages > 0 {
 		p.logger.Warn("Producer closed with pending messages", "count", remainingMessages)
