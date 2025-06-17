@@ -25,7 +25,7 @@ func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) err
 		"payload":      outbox.Payload,
 	}
 
-	query := `INSERT INTO outbox_events (aggregate_id, event_type, payload) VALUES (@aggregate_id, @event_type, @payload)`
+	query := `INSERT INTO outbox (aggregate_id, event_type, payload) VALUES (@aggregate_id, @event_type, @payload)`
 
 	_, err := r.db.Exec(ctx, query, args)
 	if err != nil {
