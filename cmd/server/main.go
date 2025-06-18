@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"pinstack-relation-service/config"
 	follow_grpc "pinstack-relation-service/internal/delivery/grpc"
+	"pinstack-relation-service/internal/events/kafka"
+	"pinstack-relation-service/internal/events/outbox"
 	"pinstack-relation-service/internal/logger"
 	repository_postgres "pinstack-relation-service/internal/repository/postgres"
 	"pinstack-relation-service/internal/service"
@@ -40,6 +42,25 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+
+	kafkaProducer, err := kafka.NewProducer(cfg.Kafka, log)
+	if err != nil {
+		log.Error("Failed to initialize Kafka producer", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer kafkaProducer.Close()
+
+	outboxRepo := outbox.NewOutboxRepository(pool, log)
+
+	outboxWorker := outbox.NewOutboxWorker(
+		outboxRepo,
+		kafkaProducer,
+		cfg.Outbox,
+		log,
+	)
+
+	outboxWorker.Start(ctx)
+	defer outboxWorker.Stop()
 
 	unitOfWork := uow.NewPostgresUOW(pool, log)
 	followRepo := repository_postgres.NewFollowRepository(pool, log)

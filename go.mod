@@ -3,6 +3,7 @@ module pinstack-relation-service
 go 1.24.2
 
 require (
+	github.com/confluentinc/confluent-kafka-go/v2 v2.10.1
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
@@ -27,6 +28,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
+	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect

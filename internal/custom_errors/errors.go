@@ -135,4 +135,5 @@ var (
 	ErrFollowRelationCreateFail = errors.New("failed to create follow relation")
 	ErrFollowRelationDeleteFail = errors.New("failed to delete follow relation")
 	ErrAlreadyFollowing         = errors.New("already following this user")
+	ErrUnexpectedEventType      = errors.New("unexpected event type in outbox")
 )
