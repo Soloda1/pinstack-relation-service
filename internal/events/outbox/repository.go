@@ -38,15 +38,19 @@ func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) err
 	return nil
 }
 
-func (r *Repository) GetEventsForProcessing(ctx context.Context) ([]model.OutboxEvent, error) {
+func (r *Repository) GetEventsForProcessing(ctx context.Context, limit int) ([]model.OutboxEvent, error) {
 	query := `
 		SELECT id, aggregate_id, event_type, payload, status, created_at, sent_at
 		FROM outbox
 		WHERE status = 'new'
 		ORDER BY created_at
+		LIMIT @limit
 	`
+	args := pgx.NamedArgs{
+		"limit": limit,
+	}
 
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, args)
 	if err != nil {
 		r.log.Error("Failed to get events for processing", slog.String("error", err.Error()))
 		return nil, err

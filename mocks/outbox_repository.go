@@ -71,9 +71,9 @@ func (_c *OutboxRepository_AddEvent_Call) RunAndReturn(run func(context.Context,
 	return _c
 }
 
-// GetEventsForProcessing provides a mock function with given fields: ctx
-func (_m *OutboxRepository) GetEventsForProcessing(ctx context.Context) ([]model.OutboxEvent, error) {
-	ret := _m.Called(ctx)
+// GetEventsForProcessing provides a mock function with given fields: ctx, limit
+func (_m *OutboxRepository) GetEventsForProcessing(ctx context.Context, limit int) ([]model.OutboxEvent, error) {
+	ret := _m.Called(ctx, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetEventsForProcessing")
@@ -81,19 +81,19 @@ func (_m *OutboxRepository) GetEventsForProcessing(ctx context.Context) ([]model
 
 	var r0 []model.OutboxEvent
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]model.OutboxEvent, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, int) ([]model.OutboxEvent, error)); ok {
+		return rf(ctx, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []model.OutboxEvent); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, int) []model.OutboxEvent); ok {
+		r0 = rf(ctx, limit)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]model.OutboxEvent)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -108,13 +108,14 @@ type OutboxRepository_GetEventsForProcessing_Call struct {
 
 // GetEventsForProcessing is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *OutboxRepository_Expecter) GetEventsForProcessing(ctx interface{}) *OutboxRepository_GetEventsForProcessing_Call {
-	return &OutboxRepository_GetEventsForProcessing_Call{Call: _e.mock.On("GetEventsForProcessing", ctx)}
+//   - limit int
+func (_e *OutboxRepository_Expecter) GetEventsForProcessing(ctx interface{}, limit interface{}) *OutboxRepository_GetEventsForProcessing_Call {
+	return &OutboxRepository_GetEventsForProcessing_Call{Call: _e.mock.On("GetEventsForProcessing", ctx, limit)}
 }
 
-func (_c *OutboxRepository_GetEventsForProcessing_Call) Run(run func(ctx context.Context)) *OutboxRepository_GetEventsForProcessing_Call {
+func (_c *OutboxRepository_GetEventsForProcessing_Call) Run(run func(ctx context.Context, limit int)) *OutboxRepository_GetEventsForProcessing_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(int))
 	})
 	return _c
 }
@@ -124,7 +125,7 @@ func (_c *OutboxRepository_GetEventsForProcessing_Call) Return(_a0 []model.Outbo
 	return _c
 }
 
-func (_c *OutboxRepository_GetEventsForProcessing_Call) RunAndReturn(run func(context.Context) ([]model.OutboxEvent, error)) *OutboxRepository_GetEventsForProcessing_Call {
+func (_c *OutboxRepository_GetEventsForProcessing_Call) RunAndReturn(run func(context.Context, int) ([]model.OutboxEvent, error)) *OutboxRepository_GetEventsForProcessing_Call {
 	_c.Call.Return(run)
 	return _c
 }
