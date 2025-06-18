@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/viper"
 	"log"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -13,6 +14,7 @@ type Config struct {
 	UserService UserService
 	EventTypes  EventTypes
 	Kafka       Kafka
+	Outbox      OutboxConfig
 }
 
 type GRPCServer struct {
@@ -53,6 +55,17 @@ type Kafka struct {
 	LingerMs                  int
 }
 
+type OutboxConfig struct {
+	Concurrency    int
+	TickIntervalMs int
+	BatchSize      int
+}
+
+// TickInterval возвращает интервал тикера в формате time.Duration
+func (o OutboxConfig) TickInterval() time.Duration {
+	return time.Duration(o.TickIntervalMs) * time.Millisecond
+}
+
 func MustLoad() *Config {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -87,6 +100,10 @@ func MustLoad() *Config {
 	viper.SetDefault("kafka.compression_type", "snappy")
 	viper.SetDefault("kafka.batch_size", 16384)
 	viper.SetDefault("kafka.linger_ms", 5)
+
+	viper.SetDefault("outbox.concurrency", 10)
+	viper.SetDefault("outbox.tick_interval_ms", 2000)
+	viper.SetDefault("outbox.batch_size", 100)
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Printf("Error reading config file: %s", err)
@@ -127,6 +144,11 @@ func MustLoad() *Config {
 			CompressionType:           viper.GetString("kafka.compression_type"),
 			BatchSize:                 viper.GetInt("kafka.batch_size"),
 			LingerMs:                  viper.GetInt("kafka.linger_ms"),
+		},
+		Outbox: OutboxConfig{
+			Concurrency:    viper.GetInt("outbox.concurrency"),
+			TickIntervalMs: viper.GetInt("outbox.tick_interval_ms"),
+			BatchSize:      viper.GetInt("outbox.batch_size"),
 		},
 	}
 
