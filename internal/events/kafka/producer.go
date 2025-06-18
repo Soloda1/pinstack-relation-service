@@ -47,65 +47,79 @@ func NewProducer(kafkaConfig config.Kafka, logger *logger.Logger) (*Producer, er
 	}, nil
 }
 
-func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) error {
-	payload, err := json.Marshal(event.Payload)
-	if err != nil {
-		p.logger.Error("Failed to marshal event payload", slog.String("error", err.Error()), slog.Int64("event_id", event.ID))
-		return err
-	}
-
-	message := &kafka.Message{
-		TopicPartition: kafka.TopicPartition{
-			Topic:     &p.topic,
-			Partition: kafka.PartitionAny,
-		},
-		Key:   []byte(event.EventType),
-		Value: payload,
-		Headers: []kafka.Header{
-			{
-				Key:   "event_id",
-				Value: []byte(fmt.Sprintf("%d", event.ID)),
-			},
-			{
-				Key:   "event_type",
-				Value: []byte(event.EventType),
-			},
-			{
-				Key:   "created_at",
-				Value: []byte(event.CreatedAt.String()),
-			},
-		},
-	}
-
-	err = p.producer.Produce(message, nil)
-	if err != nil {
-		p.logger.Error("Failed to produce message", slog.String("error", err.Error()), slog.Int64("event_id", event.ID))
-		return err
-	}
-
-	go p.handleDeliveryReports()
-
-	p.logger.Info("Message sent to Kafka", slog.Int64("event_id", event.ID), slog.String("event_type", event.EventType))
-	return nil
+type SendResult struct {
+	EventID int64
+	Error   error
 }
 
-func (p *Producer) handleDeliveryReports() {
-	for e := range p.producer.Events() {
-		switch ev := e.(type) {
-		case *kafka.Message:
-			if ev.TopicPartition.Error != nil {
-				p.logger.Error("Failed to deliver message",
-					slog.String("error", ev.TopicPartition.Error.Error()),
-					slog.String("topic", *ev.TopicPartition.Topic),
-					slog.Int("partition", int(ev.TopicPartition.Partition)))
+func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) <-chan SendResult {
+	resultChan := make(chan SendResult)
+
+	go func() {
+		defer close(resultChan)
+
+		payload, err := json.Marshal(event.Payload)
+		if err != nil {
+			p.logger.Error("Failed to marshal event payload", slog.String("error", err.Error()), slog.Int64("event_id", event.ID))
+			resultChan <- SendResult{EventID: event.ID, Error: err}
+			return
+		}
+
+		deliveryChan := make(chan kafka.Event)
+		defer close(deliveryChan)
+
+		message := &kafka.Message{
+			TopicPartition: kafka.TopicPartition{
+				Topic:     &p.topic,
+				Partition: kafka.PartitionAny,
+			},
+			Key:   []byte(event.EventType),
+			Value: payload,
+			Headers: []kafka.Header{
+				{
+					Key:   "event_id",
+					Value: []byte(fmt.Sprintf("%d", event.ID)),
+				},
+				{
+					Key:   "event_type",
+					Value: []byte(event.EventType),
+				},
+				{
+					Key:   "created_at",
+					Value: []byte(event.CreatedAt.String()),
+				},
+			},
+		}
+
+		err = p.producer.Produce(message, deliveryChan)
+		if err != nil {
+			p.logger.Error("Failed to produce message", slog.String("error", err.Error()), slog.Int64("event_id", event.ID))
+			resultChan <- SendResult{EventID: event.ID, Error: err}
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			resultChan <- SendResult{EventID: event.ID, Error: ctx.Err()}
+		case e := <-deliveryChan:
+			m := e.(*kafka.Message)
+			if m.TopicPartition.Error != nil {
+				p.logger.Error("Message delivery failed",
+					slog.String("error", m.TopicPartition.Error.Error()),
+					slog.Int64("event_id", event.ID))
+				resultChan <- SendResult{EventID: event.ID, Error: m.TopicPartition.Error}
 			} else {
-				p.logger.Debug("Message delivered",
-					slog.String("topic", *ev.TopicPartition.Topic),
-					slog.Int("partition", int(ev.TopicPartition.Partition)),
-					slog.Int("offset", int(ev.TopicPartition.Offset)))
+				p.logger.Info("Message delivered successfully",
+					slog.Int64("event_id", event.ID),
+					slog.String("topic", *m.TopicPartition.Topic),
+					slog.Int("partition", int(m.TopicPartition.Partition)),
+					slog.Int("offset", int(m.TopicPartition.Offset)))
+				resultChan <- SendResult{EventID: event.ID, Error: nil}
 			}
 		}
-	}
+	}()
+
+	return resultChan
 }
 
 func (p *Producer) Close() {
