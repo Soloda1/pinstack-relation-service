@@ -61,7 +61,6 @@ type OutboxConfig struct {
 	BatchSize      int
 }
 
-// TickInterval возвращает интервал тикера в формате time.Duration
 func (o OutboxConfig) TickInterval() time.Duration {
 	return time.Duration(o.TickIntervalMs) * time.Millisecond
 }
@@ -90,7 +89,7 @@ func MustLoad() *Config {
 	viper.SetDefault("user_service.port", 50051)
 
 	viper.SetDefault("kafka.brokers", "kafka1:9092,kafka2:9092,kafka3:9092")
-	viper.SetDefault("kafka.topic", "relation_events")
+	viper.SetDefault("kafka.topic", "relation-events")
 	viper.SetDefault("kafka.acks", "all")
 	viper.SetDefault("kafka.retries", 3)
 	viper.SetDefault("kafka.retry_backoff_ms", 500)
