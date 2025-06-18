@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"log/slog"
 	"pinstack-relation-service/config"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
@@ -33,11 +34,11 @@ func NewProducer(kafkaConfig config.Kafka, logger *logger.Logger) (*Producer, er
 	})
 
 	if err != nil {
-		logger.Error("Failed to create Kafka producer", "error", err.Error())
+		logger.Error("Failed to create Kafka producer", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	logger.Info("Kafka producer created successfully", "brokers", kafkaConfig.Brokers, "topic", kafkaConfig.Topic)
+	logger.Info("Kafka producer created successfully", slog.String("brokers", kafkaConfig.Brokers), slog.String("topic", kafkaConfig.Topic))
 
 	return &Producer{
 		producer: p,
@@ -49,7 +50,7 @@ func NewProducer(kafkaConfig config.Kafka, logger *logger.Logger) (*Producer, er
 func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) error {
 	payload, err := json.Marshal(event.Payload)
 	if err != nil {
-		p.logger.Error("Failed to marshal event payload", "error", err.Error(), "event_id", event.ID)
+		p.logger.Error("Failed to marshal event payload", slog.String("error", err.Error()), slog.Int64("event_id", event.ID))
 		return err
 	}
 
@@ -78,13 +79,13 @@ func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) err
 
 	err = p.producer.Produce(message, nil)
 	if err != nil {
-		p.logger.Error("Failed to produce message", "error", err.Error(), "event_id", event.ID)
+		p.logger.Error("Failed to produce message", slog.String("error", err.Error()), slog.Int64("event_id", event.ID))
 		return err
 	}
 
 	go p.handleDeliveryReports()
 
-	p.logger.Info("Message sent to Kafka", "event_id", event.ID, "event_type", event.EventType)
+	p.logger.Info("Message sent to Kafka", slog.Int64("event_id", event.ID), slog.String("event_type", event.EventType))
 	return nil
 }
 
@@ -94,14 +95,14 @@ func (p *Producer) handleDeliveryReports() {
 		case *kafka.Message:
 			if ev.TopicPartition.Error != nil {
 				p.logger.Error("Failed to deliver message",
-					"error", ev.TopicPartition.Error,
-					"topic", *ev.TopicPartition.Topic,
-					"partition", ev.TopicPartition.Partition)
+					slog.String("error", ev.TopicPartition.Error.Error()),
+					slog.String("topic", *ev.TopicPartition.Topic),
+					slog.Int("partition", int(ev.TopicPartition.Partition)))
 			} else {
 				p.logger.Debug("Message delivered",
-					"topic", *ev.TopicPartition.Topic,
-					"partition", ev.TopicPartition.Partition,
-					"offset", ev.TopicPartition.Offset)
+					slog.String("topic", *ev.TopicPartition.Topic),
+					slog.Int("partition", int(ev.TopicPartition.Partition)),
+					slog.Int("offset", int(ev.TopicPartition.Offset)))
 			}
 		}
 	}
@@ -110,7 +111,7 @@ func (p *Producer) handleDeliveryReports() {
 func (p *Producer) Close() {
 	remainingMessages := p.producer.Flush(10000) // Таймаут в мс
 	if remainingMessages > 0 {
-		p.logger.Warn("Producer closed with pending messages", "count", remainingMessages)
+		p.logger.Warn("Producer closed with pending messages", slog.Int("count", remainingMessages))
 	}
 
 	p.producer.Close()
