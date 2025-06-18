@@ -7,6 +7,7 @@ import (
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
 	repository_postgres "pinstack-relation-service/internal/repository/postgres"
+	"time"
 )
 
 type Repository struct {
@@ -34,5 +35,112 @@ func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) err
 	}
 
 	r.log.Info("Event added to outbox successfully", slog.Int64("aggregate_id", outbox.AggregateID), slog.String("event_type", outbox.EventType))
+	return nil
+}
+
+func (r *Repository) GetEventsForProcessing(ctx context.Context) ([]model.OutboxEvent, error) {
+	query := `
+		SELECT id, aggregate_id, event_type, payload, status, created_at, sent_at
+		FROM outbox
+		WHERE status = 'new'
+		ORDER BY created_at
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		r.log.Error("Failed to get events for processing", slog.String("error", err.Error()))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []model.OutboxEvent
+	for rows.Next() {
+		var event model.OutboxEvent
+		if err := rows.Scan(
+			&event.ID,
+			&event.AggregateID,
+			&event.EventType,
+			&event.Payload,
+			&event.Status,
+			&event.CreatedAt,
+			&event.SentAt,
+		); err != nil {
+			r.log.Error("Failed to scan event row", slog.String("error", err.Error()))
+			return nil, err
+		}
+		events = append(events, event)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.log.Error("Error iterating over event rows", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return events, nil
+}
+
+func (r *Repository) UpdateEventStatus(ctx context.Context, eventID int64, status model.OutboxStatus, sentAt *time.Time) error {
+	var query string
+	var args pgx.NamedArgs
+
+	if sentAt != nil {
+		query = `
+			UPDATE outbox
+			SET status = @status, sent_at = @sent_at
+			WHERE id = @id
+		`
+		args = pgx.NamedArgs{
+			"status":  status,
+			"sent_at": *sentAt,
+			"id":      eventID,
+		}
+	} else {
+		query = `
+			UPDATE outbox
+			SET status = @status
+			WHERE id = @id
+		`
+		args = pgx.NamedArgs{
+			"status": status,
+			"id":     eventID,
+		}
+	}
+
+	_, err := r.db.Exec(ctx, query, args)
+	if err != nil {
+		r.log.Error("Failed to update event status",
+			slog.String("error", err.Error()),
+			slog.Int64("event_id", eventID),
+			slog.String("status", string(status)))
+		return err
+	}
+
+	r.log.Info("Event status updated",
+		slog.Int64("event_id", eventID),
+		slog.String("status", string(status)))
+	return nil
+}
+
+func (r *Repository) MarkEventAsPending(ctx context.Context, eventID int64) error {
+	query := `
+		UPDATE outbox
+		SET status = @status
+		WHERE id = @id
+	`
+
+	args := pgx.NamedArgs{
+		"status": model.OutboxStatusPending,
+		"id":     eventID,
+	}
+
+	_, err := r.db.Exec(ctx, query, args)
+	if err != nil {
+		r.log.Error("Failed to mark event as pending",
+			slog.String("error", err.Error()),
+			slog.Int64("event_id", eventID))
+		return err
+	}
+
+	r.log.Debug("Event marked as pending", slog.Int64("event_id", eventID))
 	return nil
 }
