@@ -15,7 +15,7 @@ import (
 
 type OutboxWorker struct {
 	repo      OutboxRepository
-	producer  *kafka.Producer
+	producer  kafka.KafkaProducer
 	log       *logger.Logger
 	config    config.OutboxConfig
 	wg        *sync.WaitGroup
@@ -26,7 +26,7 @@ type OutboxWorker struct {
 
 func NewOutboxWorker(
 	repo OutboxRepository,
-	producer *kafka.Producer,
+	producer kafka.KafkaProducer,
 	config config.OutboxConfig,
 	log *logger.Logger,
 ) *OutboxWorker {

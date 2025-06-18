@@ -43,7 +43,6 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Инициализация producer для Kafka
 	kafkaProducer, err := kafka.NewProducer(cfg.Kafka, log)
 	if err != nil {
 		log.Error("Failed to initialize Kafka producer", slog.String("error", err.Error()))
@@ -51,10 +50,8 @@ func main() {
 	}
 	defer kafkaProducer.Close()
 
-	// Инициализация outbox репозитория
 	outboxRepo := outbox.NewOutboxRepository(pool, log)
 
-	// Создание outbox worker с использованием конфигурации
 	outboxWorker := outbox.NewOutboxWorker(
 		outboxRepo,
 		kafkaProducer,
@@ -62,7 +59,6 @@ func main() {
 		log,
 	)
 
-	// Запуск outbox worker
 	outboxWorker.Start(ctx)
 	defer outboxWorker.Stop()
 
