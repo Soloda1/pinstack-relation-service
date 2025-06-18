@@ -7,6 +7,7 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"log/slog"
 	"pinstack-relation-service/config"
+	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
 )
@@ -102,7 +103,14 @@ func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) <-c
 		case <-ctx.Done():
 			resultChan <- SendResult{EventID: event.ID, Error: ctx.Err()}
 		case e := <-deliveryChan:
-			m := e.(*kafka.Message)
+			m, ok := e.(*kafka.Message)
+			if !ok {
+				p.logger.Error("Unexpected event type received on delivery channel",
+					slog.String("event_type", fmt.Sprintf("%T", e)),
+					slog.Int64("event_id", event.ID))
+				resultChan <- SendResult{EventID: event.ID, Error: custom_errors.ErrUnexpectedEventType}
+				return
+			}
 			if m.TopicPartition.Error != nil {
 				p.logger.Error("Message delivery failed",
 					slog.String("error", m.TopicPartition.Error.Error()),

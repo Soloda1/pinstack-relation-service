@@ -97,15 +97,14 @@ func (wp *OutboxWorker) processBatch(ctx context.Context) {
 func (wp *OutboxWorker) worker(ctx context.Context, event model.OutboxEvent) {
 	defer wp.wg.Done()
 
-	wp.semaphore.Acquire()
-	defer wp.semaphore.Release()
-
 	select {
 	case <-ctx.Done():
 		wp.log.Debug("Skipping event processing due to context cancellation",
 			slog.Int64("event_id", event.ID))
 		return
 	default:
+		wp.semaphore.Acquire()
+		defer wp.semaphore.Release()
 		wp.processEvent(ctx, event)
 	}
 }
