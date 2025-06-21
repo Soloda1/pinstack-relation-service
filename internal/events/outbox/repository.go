@@ -30,11 +30,11 @@ func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) err
 
 	_, err := r.db.Exec(ctx, query, args)
 	if err != nil {
-		r.log.Error("Failed to add event to outbox", slog.String("error", err.Error()), slog.Int64("aggregate_id", outbox.AggregateID), slog.String("event_type", outbox.EventType))
+		r.log.Error("Failed to add event to outbox", slog.String("error", err.Error()), slog.Int64("aggregate_id", outbox.AggregateID), slog.String("event_type", string(outbox.EventType)))
 		return err
 	}
 
-	r.log.Info("Event added to outbox successfully", slog.Int64("aggregate_id", outbox.AggregateID), slog.String("event_type", outbox.EventType))
+	r.log.Info("Event added to outbox successfully", slog.Int64("aggregate_id", outbox.AggregateID), slog.String("event_type", string(outbox.EventType)))
 	return nil
 }
 

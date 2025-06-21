@@ -8,7 +8,7 @@ import (
 	"pinstack-relation-service/internal/events/outbox"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/repository"
-	"pinstack-relation-service/internal/repository/postgres"
+	repository_postgres "pinstack-relation-service/internal/repository/postgres"
 )
 
 type PostgresUnitOfWork struct {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"github.com/soloda1/pinstack-proto-definitions/events"
 	"log/slog"
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
@@ -63,7 +64,7 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) erro
 		return err
 	}
 
-	payload, err := json.Marshal(model.FollowCreatedPayload{
+	payload, err := json.Marshal(events.FollowCreatedPayload{
 		FollowerID:  follower.FollowerID,
 		FolloweeID:  follower.FolloweeID,
 		Timestamptz: time.Now(),
@@ -74,7 +75,7 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) erro
 	}
 
 	event := model.OutboxEvent{
-		EventType:   model.EventTypeFollowCreated,
+		EventType:   events.EventTypeFollowCreated,
 		Payload:     payload,
 		AggregateID: follower.ID,
 	}
