@@ -15,6 +15,7 @@ type Config struct {
 	EventTypes  EventTypes
 	Kafka       Kafka
 	Outbox      OutboxConfig
+	Prometheus  Prometheus
 }
 
 type GRPCServer struct {
@@ -61,6 +62,11 @@ type OutboxConfig struct {
 	BatchSize      int
 }
 
+type Prometheus struct {
+	Address string
+	Port    int
+}
+
 func (o OutboxConfig) TickInterval() time.Duration {
 	return time.Duration(o.TickIntervalMs) * time.Millisecond
 }
@@ -103,6 +109,9 @@ func MustLoad() *Config {
 	viper.SetDefault("outbox.concurrency", 10)
 	viper.SetDefault("outbox.tick_interval_ms", 2000)
 	viper.SetDefault("outbox.batch_size", 100)
+
+	viper.SetDefault("prometheus.address", "0.0.0.0")
+	viper.SetDefault("prometheus.port", 9104)
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Printf("Error reading config file: %s", err)
@@ -148,6 +157,10 @@ func MustLoad() *Config {
 			Concurrency:    viper.GetInt("outbox.concurrency"),
 			TickIntervalMs: viper.GetInt("outbox.tick_interval_ms"),
 			BatchSize:      viper.GetInt("outbox.batch_size"),
+		},
+		Prometheus: Prometheus{
+			Address: viper.GetString("prometheus.address"),
+			Port:    viper.GetInt("prometheus.port"),
 		},
 	}
 
