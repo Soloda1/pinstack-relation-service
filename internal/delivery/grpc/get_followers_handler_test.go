@@ -66,7 +66,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - limit zero",
@@ -78,7 +78,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - limit too large",
@@ -90,7 +90,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - page zero",
@@ -102,7 +102,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "user not found error",
@@ -117,7 +117,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.NotFound,
-			expectedErrMsg: "user not found",
+			expectedErrMsg: custom_errors.ErrUserNotFound.Error(),
 		},
 		{
 			name: "database query error",
@@ -132,7 +132,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to fetch followers",
+			expectedErrMsg: custom_errors.ErrDatabaseQuery.Error(),
 		},
 		{
 			name: "generic error",
@@ -147,7 +147,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to get followers",
+			expectedErrMsg: custom_errors.ErrInternalServiceError.Error(),
 		},
 	}
 

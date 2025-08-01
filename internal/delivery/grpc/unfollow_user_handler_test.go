@@ -47,7 +47,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - followee ID zero",
@@ -58,7 +58,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - self unfollow",
@@ -69,7 +69,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "follow relation not found error",
@@ -82,7 +82,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.NotFound,
-			expectedErrMsg: "follow relation not found",
+			expectedErrMsg: custom_errors.ErrFollowRelationNotFound.Error(),
 		},
 		{
 			name: "user not found error",
@@ -95,7 +95,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.NotFound,
-			expectedErrMsg: "user not found",
+			expectedErrMsg: custom_errors.ErrUserNotFound.Error(),
 		},
 		{
 			name: "self unfollow error from service",
@@ -104,11 +104,11 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 				FolloweeId: 2,
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
-				mockService.On("Unfollow", mock.Anything, int64(1), int64(2)).Return(custom_errors.ErrSelfFollow)
+				mockService.On("Unfollow", mock.Anything, int64(1), int64(2)).Return(custom_errors.ErrSelfUnfollow)
 			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "cannot unfollow yourself",
+			expectedErrMsg: custom_errors.ErrSelfUnfollow.Error(),
 		},
 		{
 			name: "database error",
@@ -121,7 +121,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to unfollow user",
+			expectedErrMsg: custom_errors.ErrInternalServiceError.Error(),
 		},
 		{
 			name: "follow relation delete fail",
@@ -134,7 +134,7 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to unfollow user",
+			expectedErrMsg: custom_errors.ErrInternalServiceError.Error(),
 		},
 	}
 

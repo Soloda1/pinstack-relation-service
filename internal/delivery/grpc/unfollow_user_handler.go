@@ -2,6 +2,7 @@ package follow_grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-playground/validator/v10"
 	pb "github.com/soloda1/pinstack-proto-definitions/gen/go/pinstack-proto-definitions/relation/v1"
@@ -45,12 +46,12 @@ func (h *UnfollowHandler) Unfollow(ctx context.Context, req *pb.UnfollowRequest)
 
 	err := h.relationService.Unfollow(ctx, req.GetFollowerId(), req.GetFolloweeId())
 	if err != nil {
-		switch err {
-		case custom_errors.ErrFollowRelationNotFound:
+		switch {
+		case errors.Is(err, custom_errors.ErrFollowRelationNotFound):
 			return nil, status.Error(codes.NotFound, custom_errors.ErrFollowRelationNotFound.Error())
-		case custom_errors.ErrUserNotFound:
+		case errors.Is(err, custom_errors.ErrUserNotFound):
 			return nil, status.Error(codes.NotFound, custom_errors.ErrUserNotFound.Error())
-		case custom_errors.ErrSelfFollow:
+		case errors.Is(err, custom_errors.ErrSelfUnfollow):
 			return nil, status.Error(codes.InvalidArgument, custom_errors.ErrSelfUnfollow.Error())
 		default:
 			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())

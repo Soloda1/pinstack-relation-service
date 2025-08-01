@@ -47,7 +47,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - followee ID zero",
@@ -58,7 +58,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - self follow",
@@ -69,7 +69,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "self follow error from service",
@@ -82,7 +82,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "cannot follow yourself",
+			expectedErrMsg: custom_errors.ErrSelfFollow.Error(),
 		},
 		{
 			name: "already following error",
@@ -95,7 +95,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.AlreadyExists,
-			expectedErrMsg: "already following this user",
+			expectedErrMsg: custom_errors.ErrAlreadyFollowing.Error(),
 		},
 		{
 			name: "user not found error",
@@ -108,7 +108,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.NotFound,
-			expectedErrMsg: "user not found",
+			expectedErrMsg: custom_errors.ErrUserNotFound.Error(),
 		},
 		{
 			name: "database error",
@@ -121,7 +121,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to follow user",
+			expectedErrMsg: custom_errors.ErrInternalServiceError.Error(),
 		},
 	}
 
