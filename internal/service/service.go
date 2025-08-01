@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/soloda1/pinstack-proto-definitions/events"
 	"log/slog"
+	user_client "pinstack-relation-service/internal/clients/user"
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
@@ -16,14 +17,16 @@ import (
 
 type Service struct {
 	followRepo repository.FollowRepository
+	userClient user_client.Client
 	uow        uow.UnitOfWork
 	log        *logger.Logger
 }
 
-func NewFollowService(log *logger.Logger, followRepo repository.FollowRepository, uow uow.UnitOfWork) *Service {
+func NewFollowService(log *logger.Logger, followRepo repository.FollowRepository, uow uow.UnitOfWork, userClient user_client.Client) *Service {
 	return &Service{
 		log:        log,
 		followRepo: followRepo,
+		userClient: userClient,
 		uow:        uow,
 	}
 }

@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"pinstack-relation-service/config"
+	user_client "pinstack-relation-service/internal/clients/user"
 	follow_grpc "pinstack-relation-service/internal/delivery/grpc"
 	"pinstack-relation-service/internal/events/kafka"
 	"pinstack-relation-service/internal/events/outbox"
@@ -68,7 +71,19 @@ func main() {
 	unitOfWork := uow.NewPostgresUOW(pool, log)
 	followRepo := repository_postgres.NewFollowRepository(pool, log)
 
-	followService := service.NewFollowService(log, followRepo, unitOfWork)
+	userServiceConn, err := grpc.NewClient(
+		fmt.Sprintf("%s:%d", cfg.UserService.Address, cfg.UserService.Port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Error("Failed to connect to user service", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer userServiceConn.Close()
+
+	userClient := user_client.NewUserClient(userServiceConn, log)
+
+	followService := service.NewFollowService(log, followRepo, unitOfWork, userClient)
 	followGRPCApi := follow_grpc.NewFollowGRPCService(followService, log)
 	grpcServer := follow_grpc.NewServer(followGRPCApi, cfg.GRPCServer.Address, cfg.GRPCServer.Port, log)
 
