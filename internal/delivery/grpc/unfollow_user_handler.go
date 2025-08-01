@@ -40,20 +40,20 @@ func (h *UnfollowHandler) Unfollow(ctx context.Context, req *pb.UnfollowRequest)
 	}
 
 	if err := h.validate.Struct(validationReq); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
+		return nil, status.Error(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
 	}
 
 	err := h.relationService.Unfollow(ctx, req.GetFollowerId(), req.GetFolloweeId())
 	if err != nil {
 		switch err {
 		case custom_errors.ErrFollowRelationNotFound:
-			return nil, status.Errorf(codes.NotFound, custom_errors.ErrFollowRelationNotFound.Error())
+			return nil, status.Error(codes.NotFound, custom_errors.ErrFollowRelationNotFound.Error())
 		case custom_errors.ErrUserNotFound:
-			return nil, status.Errorf(codes.NotFound, custom_errors.ErrUserNotFound.Error())
+			return nil, status.Error(codes.NotFound, custom_errors.ErrUserNotFound.Error())
 		case custom_errors.ErrSelfFollow:
-			return nil, status.Errorf(codes.InvalidArgument, custom_errors.ErrSelfUnfollow.Error())
+			return nil, status.Error(codes.InvalidArgument, custom_errors.ErrSelfUnfollow.Error())
 		default:
-			return nil, status.Errorf(codes.Internal, custom_errors.ErrInternalServiceError.Error())
+			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())
 		}
 	}
 

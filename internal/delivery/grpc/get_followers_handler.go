@@ -43,18 +43,18 @@ func (h *GetFollowersHandler) GetFollowers(ctx context.Context, req *pb.GetFollo
 	}
 
 	if err := h.validate.Struct(validationReq); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
+		return nil, status.Error(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
 	}
 
 	followerIDs, err := h.relationService.GetFollowers(ctx, req.GetFolloweeId(), req.GetLimit(), req.GetPage())
 	if err != nil {
 		switch {
 		case errors.Is(err, custom_errors.ErrUserNotFound):
-			return nil, status.Errorf(codes.NotFound, custom_errors.ErrUserNotFound.Error())
+			return nil, status.Error(codes.NotFound, custom_errors.ErrUserNotFound.Error())
 		case errors.Is(err, custom_errors.ErrDatabaseQuery):
-			return nil, status.Errorf(codes.Internal, custom_errors.ErrDatabaseQuery.Error())
+			return nil, status.Error(codes.Internal, custom_errors.ErrDatabaseQuery.Error())
 		default:
-			return nil, status.Errorf(codes.Internal, custom_errors.ErrInternalServiceError.Error())
+			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())
 		}
 	}
 

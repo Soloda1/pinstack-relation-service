@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"github.com/soloda1/pinstack-proto-definitions/events"
+	"errors"
 	"log/slog"
 	user_client "pinstack-relation-service/internal/clients/user"
 	"pinstack-relation-service/internal/custom_errors"
@@ -13,6 +13,8 @@ import (
 	"pinstack-relation-service/internal/uow"
 	"pinstack-relation-service/internal/utils"
 	"time"
+
+	"github.com/soloda1/pinstack-proto-definitions/events"
 )
 
 type Service struct {
@@ -31,11 +33,24 @@ func NewFollowService(log *logger.Logger, followRepo repository.FollowRepository
 	}
 }
 
-func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) error {
+func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) (err error) {
 	s.log.Info("Follow request received", slog.Int64("followerID", followerID), slog.Int64("followeeID", followeeID))
 
 	if followerID == followeeID {
 		return custom_errors.ErrSelfFollow
+	}
+
+	_, err = s.userClient.GetUser(ctx, followeeID)
+	if err != nil {
+		s.log.Error("Failed to get user", slog.Int64("followeeID", followeeID))
+		switch {
+		case errors.Is(err, custom_errors.ErrUserNotFound):
+			s.log.Debug("User not found in follow", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
+			return custom_errors.ErrUserNotFound
+		default:
+			s.log.Error("Failed to get user", slog.Int64("followeeID", followeeID))
+			return err
+		}
 	}
 
 	tx, err := s.uow.Begin(ctx)
@@ -127,6 +142,18 @@ func (s *Service) Unfollow(ctx context.Context, followerID, followeeID int64) er
 
 func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]int64, error) {
 	s.log.Info("GetFollowers request received", slog.Int64("followeeID", followeeID))
+	_, err := s.userClient.GetUser(ctx, followeeID)
+	if err != nil {
+		s.log.Error("Failed to get user", slog.Int64("followeeID", followeeID))
+		switch {
+		case errors.Is(err, custom_errors.ErrUserNotFound):
+			s.log.Debug("User not found in follow", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
+			return nil, custom_errors.ErrUserNotFound
+		default:
+			s.log.Error("Failed to get user", slog.Int64("followeeID", followeeID))
+			return nil, err
+		}
+	}
 	limit, offset := utils.SetPaginationDefaults(limit, page)
 	followers, err := s.followRepo.GetFollowers(ctx, followeeID, limit, offset)
 	if err != nil {
@@ -140,6 +167,18 @@ func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, pag
 
 func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, page int32) ([]int64, error) {
 	s.log.Info("GetFollowees request received", slog.Int64("followerID", followerID))
+	_, err := s.userClient.GetUser(ctx, followerID)
+	if err != nil {
+		s.log.Error("Failed to get user", slog.Int64("followerID", followerID))
+		switch {
+		case errors.Is(err, custom_errors.ErrUserNotFound):
+			s.log.Debug("User not found in follow", slog.Int64("followerID", followerID), slog.String("error", err.Error()))
+			return nil, custom_errors.ErrUserNotFound
+		default:
+			s.log.Error("Failed to get user", slog.Int64("followerID", followerID))
+			return nil, err
+		}
+	}
 	limit, offset := utils.SetPaginationDefaults(limit, page)
 	followees, err := s.followRepo.GetFollowees(ctx, followerID, limit, offset)
 	if err != nil {
