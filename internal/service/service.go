@@ -118,7 +118,7 @@ func (s *Service) Unfollow(ctx context.Context, followerID, followeeID int64) er
 	s.log.Info("Unfollow request received", slog.Int64("followerID", followerID), slog.Int64("followeeID", followeeID))
 
 	if followerID == followeeID {
-		return custom_errors.ErrSelfFollow
+		return custom_errors.ErrSelfUnfollow
 	}
 
 	exists, err := s.followRepo.Exists(ctx, followerID, followeeID)

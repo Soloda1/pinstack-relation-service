@@ -265,7 +265,7 @@ func TestService_Unfollow(t *testing.T) {
 		err := svc.Unfollow(ctx, followerID, followerID)
 
 		assert.Error(t, err)
-		assert.Equal(t, custom_errors.ErrSelfFollow, err)
+		assert.Equal(t, custom_errors.ErrSelfUnfollow, err)
 	})
 
 	t.Run("подписка не существует", func(t *testing.T) {
