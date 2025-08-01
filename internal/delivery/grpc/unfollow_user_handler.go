@@ -40,20 +40,20 @@ func (h *UnfollowHandler) Unfollow(ctx context.Context, req *pb.UnfollowRequest)
 	}
 
 	if err := h.validate.Struct(validationReq); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid request: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
 	}
 
 	err := h.relationService.Unfollow(ctx, req.GetFollowerId(), req.GetFolloweeId())
 	if err != nil {
 		switch err {
 		case custom_errors.ErrFollowRelationNotFound:
-			return nil, status.Errorf(codes.NotFound, "follow relation not found")
+			return nil, status.Errorf(codes.NotFound, custom_errors.ErrFollowRelationNotFound.Error())
 		case custom_errors.ErrUserNotFound:
-			return nil, status.Errorf(codes.NotFound, "user not found")
+			return nil, status.Errorf(codes.NotFound, custom_errors.ErrUserNotFound.Error())
 		case custom_errors.ErrSelfFollow:
-			return nil, status.Errorf(codes.InvalidArgument, "cannot unfollow yourself")
+			return nil, status.Errorf(codes.InvalidArgument, custom_errors.ErrSelfUnfollow.Error())
 		default:
-			return nil, status.Errorf(codes.Internal, "failed to unfollow user: %v", err)
+			return nil, status.Errorf(codes.Internal, custom_errors.ErrInternalServiceError.Error())
 		}
 	}
 

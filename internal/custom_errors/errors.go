@@ -130,6 +130,7 @@ var (
 // Follower relation errors
 var (
 	ErrSelfFollow               = errors.New("cannot follow yourself")
+	ErrSelfUnfollow             = errors.New("cannot unfollow yourself")
 	ErrFollowRelationExists     = errors.New("follow relation already exists")
 	ErrFollowRelationNotFound   = errors.New("follow relation not found")
 	ErrFollowRelationCreateFail = errors.New("failed to create follow relation")

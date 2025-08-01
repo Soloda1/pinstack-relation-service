@@ -2,6 +2,7 @@ package follow_grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-playground/validator/v10"
 	pb "github.com/soloda1/pinstack-proto-definitions/gen/go/pinstack-proto-definitions/relation/v1"
@@ -42,18 +43,18 @@ func (h *GetFollowersHandler) GetFollowers(ctx context.Context, req *pb.GetFollo
 	}
 
 	if err := h.validate.Struct(validationReq); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid request: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
 	}
 
 	followerIDs, err := h.relationService.GetFollowers(ctx, req.GetFolloweeId(), req.GetLimit(), req.GetPage())
 	if err != nil {
-		switch err {
-		case custom_errors.ErrUserNotFound:
-			return nil, status.Errorf(codes.NotFound, "user not found")
-		case custom_errors.ErrDatabaseQuery:
-			return nil, status.Errorf(codes.Internal, "failed to fetch followers")
+		switch {
+		case errors.Is(err, custom_errors.ErrUserNotFound):
+			return nil, status.Errorf(codes.NotFound, custom_errors.ErrUserNotFound.Error())
+		case errors.Is(err, custom_errors.ErrDatabaseQuery):
+			return nil, status.Errorf(codes.Internal, custom_errors.ErrDatabaseQuery.Error())
 		default:
-			return nil, status.Errorf(codes.Internal, "failed to get followers: %v", err)
+			return nil, status.Errorf(codes.Internal, custom_errors.ErrInternalServiceError.Error())
 		}
 	}
 
