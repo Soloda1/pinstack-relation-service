@@ -147,10 +147,9 @@ func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, pag
 		s.log.Error("Failed to get user", slog.Int64("followeeID", followeeID))
 		switch {
 		case errors.Is(err, custom_errors.ErrUserNotFound):
-			s.log.Debug("User not found in follow", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
+			s.log.Debug("User not found in GetFollowers", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
 			return nil, custom_errors.ErrUserNotFound
 		default:
-			s.log.Error("Failed to get user", slog.Int64("followeeID", followeeID))
 			return nil, err
 		}
 	}
@@ -172,10 +171,9 @@ func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, pag
 		s.log.Error("Failed to get user", slog.Int64("followerID", followerID))
 		switch {
 		case errors.Is(err, custom_errors.ErrUserNotFound):
-			s.log.Debug("User not found in follow", slog.Int64("followerID", followerID), slog.String("error", err.Error()))
+			s.log.Debug("User not found in GetFollowees", slog.Int64("followerID", followerID), slog.String("error", err.Error()))
 			return nil, custom_errors.ErrUserNotFound
 		default:
-			s.log.Error("Failed to get user", slog.Int64("followerID", followerID))
 			return nil, err
 		}
 	}
