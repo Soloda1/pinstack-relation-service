@@ -31,7 +31,7 @@ func NewFollowHandler(relationService FollowCreator, validate *validator.Validat
 
 type FollowRequestInternal struct {
 	FollowerID int64 `validate:"required,gt=0"`
-	FolloweeID int64 `validate:"required,gt=0,nefield=FollowerID"`
+	FolloweeID int64 `validate:"required,gt=0"`
 }
 
 func (h *FollowHandler) Follow(ctx context.Context, req *pb.FollowRequest) (*pb.FollowResponse, error) {

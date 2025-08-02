@@ -66,19 +66,21 @@ func TestFollowHandler_Follow(t *testing.T) {
 				FollowerId: 1,
 				FolloweeId: 1,
 			},
-			mockSetup:      func(mockService *mocks.FollowService) {},
+			mockSetup: func(mockService *mocks.FollowService) {
+				mockService.On("Follow", mock.Anything, int64(1), int64(1)).Return(custom_errors.ErrSelfFollow)
+			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
+			expectedErrMsg: custom_errors.ErrSelfFollow.Error(),
 		},
 		{
 			name: "self follow error from service",
 			req: &pb.FollowRequest{
 				FollowerId: 1,
-				FolloweeId: 2,
+				FolloweeId: 1,
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
-				mockService.On("Follow", mock.Anything, int64(1), int64(2)).Return(custom_errors.ErrSelfFollow)
+				mockService.On("Follow", mock.Anything, int64(1), int64(1)).Return(custom_errors.ErrSelfFollow)
 			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,

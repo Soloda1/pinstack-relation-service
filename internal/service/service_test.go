@@ -146,7 +146,7 @@ func TestService_Follow(t *testing.T) {
 		err := svc.Follow(ctx, followerID, followeeID)
 
 		assert.Error(t, err)
-		assert.Equal(t, custom_errors.ErrFollowRelationExists, err)
+		assert.Equal(t, custom_errors.ErrAlreadyFollowing, err)
 		mockUOW.AssertExpectations(t)
 		mockTx.AssertExpectations(t)
 		mockFollowRepo.AssertExpectations(t)

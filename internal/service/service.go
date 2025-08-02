@@ -73,7 +73,7 @@ func (s *Service) Follow(ctx context.Context, followerID, followeeID int64) (err
 		return err
 	}
 	if exists {
-		return custom_errors.ErrFollowRelationExists
+		return custom_errors.ErrAlreadyFollowing
 	}
 
 	follower, err := followRepo.Create(ctx, followerID, followeeID)

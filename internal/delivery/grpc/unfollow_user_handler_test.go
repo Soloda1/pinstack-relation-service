@@ -66,10 +66,12 @@ func TestUnfollowHandler_Unfollow(t *testing.T) {
 				FollowerId: 1,
 				FolloweeId: 1,
 			},
-			mockSetup:      func(mockService *mocks.FollowService) {},
+			mockSetup: func(mockService *mocks.FollowService) {
+				mockService.On("Unfollow", mock.Anything, int64(1), int64(1)).Return(custom_errors.ErrSelfUnfollow)
+			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
+			expectedErrMsg: custom_errors.ErrSelfUnfollow.Error(),
 		},
 		{
 			name: "follow relation not found error",
