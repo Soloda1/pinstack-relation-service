@@ -47,7 +47,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - followee ID zero",
@@ -58,7 +58,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			mockSetup:      func(mockService *mocks.FollowService) {},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrValidationFailed.Error(),
 		},
 		{
 			name: "validation error - self follow",
@@ -66,23 +66,25 @@ func TestFollowHandler_Follow(t *testing.T) {
 				FollowerId: 1,
 				FolloweeId: 1,
 			},
-			mockSetup:      func(mockService *mocks.FollowService) {},
+			mockSetup: func(mockService *mocks.FollowService) {
+				mockService.On("Follow", mock.Anything, int64(1), int64(1)).Return(custom_errors.ErrSelfFollow)
+			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "invalid request",
+			expectedErrMsg: custom_errors.ErrSelfFollow.Error(),
 		},
 		{
 			name: "self follow error from service",
 			req: &pb.FollowRequest{
 				FollowerId: 1,
-				FolloweeId: 2,
+				FolloweeId: 1,
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
-				mockService.On("Follow", mock.Anything, int64(1), int64(2)).Return(custom_errors.ErrSelfFollow)
+				mockService.On("Follow", mock.Anything, int64(1), int64(1)).Return(custom_errors.ErrSelfFollow)
 			},
 			wantErr:        true,
 			expectedCode:   codes.InvalidArgument,
-			expectedErrMsg: "cannot follow yourself",
+			expectedErrMsg: custom_errors.ErrSelfFollow.Error(),
 		},
 		{
 			name: "already following error",
@@ -95,7 +97,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.AlreadyExists,
-			expectedErrMsg: "already following this user",
+			expectedErrMsg: custom_errors.ErrAlreadyFollowing.Error(),
 		},
 		{
 			name: "user not found error",
@@ -108,7 +110,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.NotFound,
-			expectedErrMsg: "user not found",
+			expectedErrMsg: custom_errors.ErrUserNotFound.Error(),
 		},
 		{
 			name: "database error",
@@ -121,7 +123,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: "failed to follow user",
+			expectedErrMsg: custom_errors.ErrInternalServiceError.Error(),
 		},
 	}
 

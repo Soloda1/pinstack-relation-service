@@ -31,7 +31,7 @@ func NewFollowHandler(relationService FollowCreator, validate *validator.Validat
 
 type FollowRequestInternal struct {
 	FollowerID int64 `validate:"required,gt=0"`
-	FolloweeID int64 `validate:"required,gt=0,nefield=FollowerID"`
+	FolloweeID int64 `validate:"required,gt=0"`
 }
 
 func (h *FollowHandler) Follow(ctx context.Context, req *pb.FollowRequest) (*pb.FollowResponse, error) {
@@ -41,20 +41,20 @@ func (h *FollowHandler) Follow(ctx context.Context, req *pb.FollowRequest) (*pb.
 	}
 
 	if err := h.validate.Struct(validationReq); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid request: %v", err)
+		return nil, status.Error(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
 	}
 
 	err := h.relationService.Follow(ctx, req.GetFollowerId(), req.GetFolloweeId())
 	if err != nil {
 		switch {
 		case errors.Is(err, custom_errors.ErrSelfFollow):
-			return nil, status.Errorf(codes.InvalidArgument, "cannot follow yourself")
+			return nil, status.Error(codes.InvalidArgument, custom_errors.ErrSelfFollow.Error())
 		case errors.Is(err, custom_errors.ErrAlreadyFollowing):
-			return nil, status.Errorf(codes.AlreadyExists, "already following this user")
+			return nil, status.Error(codes.AlreadyExists, custom_errors.ErrAlreadyFollowing.Error())
 		case errors.Is(err, custom_errors.ErrUserNotFound):
-			return nil, status.Errorf(codes.NotFound, "user not found")
+			return nil, status.Error(codes.NotFound, custom_errors.ErrUserNotFound.Error())
 		default:
-			return nil, status.Errorf(codes.Internal, "failed to follow user: %v", err)
+			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())
 		}
 	}
 
