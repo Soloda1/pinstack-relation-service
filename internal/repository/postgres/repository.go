@@ -95,25 +95,6 @@ func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) e
 func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, offset int32) ([]int64, int64, error) {
 	r.log.Info("Getting followers", slog.Int64("followee_id", followeeID))
 
-	countArgs := pgx.NamedArgs{
-		"followee_id": followeeID,
-	}
-
-	countQuery := `
-		SELECT COUNT(*) 
-		FROM followers 
-		WHERE followee_id = @followee_id
-	`
-
-	var total int64
-	err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
-	if err != nil {
-		r.log.Error("Failed to count followers",
-			slog.Int64("followee_id", followeeID),
-			slog.String("error", err.Error()))
-		return nil, 0, custom_errors.ErrDatabaseQuery
-	}
-
 	args := pgx.NamedArgs{
 		"followee_id": followeeID,
 		"limit":       limit,
@@ -121,7 +102,9 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 	}
 
 	query := `
-		SELECT follower_id 
+		SELECT 
+			follower_id,
+			COUNT(*) OVER() as total_count
 		FROM followers 
 		WHERE followee_id = @followee_id
 		ORDER BY created_at DESC
@@ -138,9 +121,11 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 	defer rows.Close()
 
 	followers := make([]int64, 0)
+	var total int64
+
 	for rows.Next() {
 		var followerID int64
-		if err := rows.Scan(&followerID); err != nil {
+		if err := rows.Scan(&followerID, &total); err != nil {
 			r.log.Error("Failed to scan follower row",
 				slog.Int64("followee_id", followeeID),
 				slog.String("error", err.Error()))
@@ -156,6 +141,23 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 
+	// If no rows were returned, we need to get the total count separately
+	// since the window function won't execute if there are no matching rows
+	if len(followers) == 0 {
+		countArgs := pgx.NamedArgs{
+			"followee_id": followeeID,
+		}
+
+		countQuery := `SELECT COUNT(*) FROM followers WHERE followee_id = @followee_id`
+		err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
+		if err != nil {
+			r.log.Error("Failed to count followers for empty result",
+				slog.Int64("followee_id", followeeID),
+				slog.String("error", err.Error()))
+			return nil, 0, custom_errors.ErrDatabaseQuery
+		}
+	}
+
 	r.log.Info("Successfully retrieved followers",
 		slog.Int64("followee_id", followeeID),
 		slog.Int("count", len(followers)),
@@ -166,25 +168,6 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, offset int32) ([]int64, int64, error) {
 	r.log.Info("Getting followees", slog.Int64("follower_id", followerID))
 
-	countArgs := pgx.NamedArgs{
-		"follower_id": followerID,
-	}
-
-	countQuery := `
-		SELECT COUNT(*) 
-		FROM followers 
-		WHERE follower_id = @follower_id
-	`
-
-	var total int64
-	err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
-	if err != nil {
-		r.log.Error("Failed to count followees",
-			slog.Int64("follower_id", followerID),
-			slog.String("error", err.Error()))
-		return nil, 0, custom_errors.ErrDatabaseQuery
-	}
-
 	args := pgx.NamedArgs{
 		"follower_id": followerID,
 		"limit":       limit,
@@ -192,7 +175,9 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 	}
 
 	query := `
-		SELECT followee_id 
+		SELECT 
+			followee_id,
+			COUNT(*) OVER() as total_count
 		FROM followers 
 		WHERE follower_id = @follower_id
 		ORDER BY created_at DESC
@@ -209,9 +194,11 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 	defer rows.Close()
 
 	followees := make([]int64, 0)
+	var total int64
+
 	for rows.Next() {
 		var followeeID int64
-		if err := rows.Scan(&followeeID); err != nil {
+		if err := rows.Scan(&followeeID, &total); err != nil {
 			r.log.Error("Failed to scan followee row",
 				slog.Int64("follower_id", followerID),
 				slog.String("error", err.Error()))
@@ -225,6 +212,23 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 			slog.Int64("follower_id", followerID),
 			slog.String("error", err.Error()))
 		return nil, 0, custom_errors.ErrDatabaseQuery
+	}
+
+	// If no rows were returned, we need to get the total count separately
+	// since the window function won't execute if there are no matching rows
+	if len(followees) == 0 {
+		countArgs := pgx.NamedArgs{
+			"follower_id": followerID,
+		}
+
+		countQuery := `SELECT COUNT(*) FROM followers WHERE follower_id = @follower_id`
+		err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
+		if err != nil {
+			r.log.Error("Failed to count followees for empty result",
+				slog.Int64("follower_id", followerID),
+				slog.String("error", err.Error()))
+			return nil, 0, custom_errors.ErrDatabaseQuery
+		}
 	}
 
 	r.log.Info("Successfully retrieved followees",
