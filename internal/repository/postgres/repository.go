@@ -2,11 +2,12 @@ package repository_postgres
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
 	"log/slog"
 	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Repository struct {
@@ -91,8 +92,27 @@ func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) e
 	return nil
 }
 
-func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, offset int32) ([]int64, error) {
+func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, offset int32) ([]int64, int64, error) {
 	r.log.Info("Getting followers", slog.Int64("followee_id", followeeID))
+
+	countArgs := pgx.NamedArgs{
+		"followee_id": followeeID,
+	}
+
+	countQuery := `
+		SELECT COUNT(*) 
+		FROM followers 
+		WHERE followee_id = @followee_id
+	`
+
+	var total int64
+	err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
+	if err != nil {
+		r.log.Error("Failed to count followers",
+			slog.Int64("followee_id", followeeID),
+			slog.String("error", err.Error()))
+		return nil, 0, custom_errors.ErrDatabaseQuery
+	}
 
 	args := pgx.NamedArgs{
 		"followee_id": followeeID,
@@ -113,7 +133,7 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 		r.log.Error("Failed to query followers",
 			slog.Int64("followee_id", followeeID),
 			slog.String("error", err.Error()))
-		return nil, custom_errors.ErrDatabaseQuery
+		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 	defer rows.Close()
 
@@ -124,7 +144,7 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 			r.log.Error("Failed to scan follower row",
 				slog.Int64("followee_id", followeeID),
 				slog.String("error", err.Error()))
-			return nil, custom_errors.ErrDatabaseScan
+			return nil, 0, custom_errors.ErrDatabaseScan
 		}
 		followers = append(followers, followerID)
 	}
@@ -133,17 +153,37 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 		r.log.Error("Error during followers iteration",
 			slog.Int64("followee_id", followeeID),
 			slog.String("error", err.Error()))
-		return nil, custom_errors.ErrDatabaseQuery
+		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 
 	r.log.Info("Successfully retrieved followers",
 		slog.Int64("followee_id", followeeID),
-		slog.Int("count", len(followers)))
-	return followers, nil
+		slog.Int("count", len(followers)),
+		slog.Int64("total", total))
+	return followers, total, nil
 }
 
-func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, offset int32) ([]int64, error) {
+func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, offset int32) ([]int64, int64, error) {
 	r.log.Info("Getting followees", slog.Int64("follower_id", followerID))
+
+	countArgs := pgx.NamedArgs{
+		"follower_id": followerID,
+	}
+
+	countQuery := `
+		SELECT COUNT(*) 
+		FROM followers 
+		WHERE follower_id = @follower_id
+	`
+
+	var total int64
+	err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
+	if err != nil {
+		r.log.Error("Failed to count followees",
+			slog.Int64("follower_id", followerID),
+			slog.String("error", err.Error()))
+		return nil, 0, custom_errors.ErrDatabaseQuery
+	}
 
 	args := pgx.NamedArgs{
 		"follower_id": followerID,
@@ -164,7 +204,7 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 		r.log.Error("Failed to query followees",
 			slog.Int64("follower_id", followerID),
 			slog.String("error", err.Error()))
-		return nil, custom_errors.ErrDatabaseQuery
+		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 	defer rows.Close()
 
@@ -175,7 +215,7 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 			r.log.Error("Failed to scan followee row",
 				slog.Int64("follower_id", followerID),
 				slog.String("error", err.Error()))
-			return nil, custom_errors.ErrDatabaseScan
+			return nil, 0, custom_errors.ErrDatabaseScan
 		}
 		followees = append(followees, followeeID)
 	}
@@ -184,13 +224,14 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 		r.log.Error("Error during followees iteration",
 			slog.Int64("follower_id", followerID),
 			slog.String("error", err.Error()))
-		return nil, custom_errors.ErrDatabaseQuery
+		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 
 	r.log.Info("Successfully retrieved followees",
 		slog.Int64("follower_id", followerID),
-		slog.Int("count", len(followees)))
-	return followees, nil
+		slog.Int("count", len(followees)),
+		slog.Int64("total", total))
+	return followees, total, nil
 }
 
 func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (bool, error) {

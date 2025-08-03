@@ -3,9 +3,10 @@ package repository_postgres_test
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
@@ -237,6 +238,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 		offset      int32
 		mockSetup   func(*mocks.PgDB)
 		want        []int64
+		wantTotal   int64
 		wantErr     bool
 		expectedErr error
 		checkQuery  bool
@@ -247,10 +249,39 @@ func TestRepository_GetFollowers(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 5
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT COUNT(*) 
+		FROM followers 
+		WHERE followee_id = @followee_id
+	`
+					}),
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["followee_id"] == int64(1)
+					})).Return(mockCountRow)
+
+				// Mock data query
 				rows := setupMockRows(t, []int64{2, 3, 4})
 				db.On("Query",
 					mock.Anything,
-					mock.AnythingOfType("string"),
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT follower_id 
+		FROM followers 
+		WHERE followee_id = @followee_id
+		ORDER BY created_at DESC
+		LIMIT @limit OFFSET @offset
+	`
+					}),
 					mock.MatchedBy(func(args pgx.NamedArgs) bool {
 						return args["followee_id"] == int64(1) &&
 							args["limit"] == int32(10) &&
@@ -258,6 +289,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 					})).Return(rows, nil)
 			},
 			want:       []int64{2, 3, 4},
+			wantTotal:  5,
 			wantErr:    false,
 			checkQuery: true,
 		},
@@ -267,10 +299,39 @@ func TestRepository_GetFollowers(t *testing.T) {
 			limit:      5,
 			offset:     10,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 15
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT COUNT(*) 
+		FROM followers 
+		WHERE followee_id = @followee_id
+	`
+					}),
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["followee_id"] == int64(1)
+					})).Return(mockCountRow)
+
+				// Mock data query
 				rows := setupMockRows(t, []int64{6, 7})
 				db.On("Query",
 					mock.Anything,
-					mock.AnythingOfType("string"),
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT follower_id 
+		FROM followers 
+		WHERE followee_id = @followee_id
+		ORDER BY created_at DESC
+		LIMIT @limit OFFSET @offset
+	`
+					}),
 					mock.MatchedBy(func(args pgx.NamedArgs) bool {
 						return args["followee_id"] == int64(1) &&
 							args["limit"] == int32(5) &&
@@ -278,6 +339,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 					})).Return(rows, nil)
 			},
 			want:       []int64{6, 7},
+			wantTotal:  15,
 			wantErr:    false,
 			checkQuery: true,
 		},
@@ -287,14 +349,28 @@ func TestRepository_GetFollowers(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 0
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(mockCountRow)
+
+				// Mock data query
 				rows := setupMockRows(t, []int64{})
 				db.On("Query",
 					mock.Anything,
 					mock.AnythingOfType("string"),
 					mock.Anything).Return(rows, nil)
 			},
-			want:    []int64{},
-			wantErr: false,
+			want:      []int64{},
+			wantTotal: 0,
+			wantErr:   false,
 		},
 		{
 			name:       "database query error",
@@ -302,12 +378,16 @@ func TestRepository_GetFollowers(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
-				db.On("Query",
+				// Mock count query error
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).Return(errors.New("db error"))
+				db.On("QueryRow",
 					mock.Anything,
 					mock.AnythingOfType("string"),
-					mock.Anything).Return(nil, errors.New("db error"))
+					mock.Anything).Return(mockCountRow)
 			},
 			want:        nil,
+			wantTotal:   0,
 			wantErr:     true,
 			expectedErr: custom_errors.ErrDatabaseQuery,
 		},
@@ -317,6 +397,19 @@ func TestRepository_GetFollowers(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query success
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 1
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(mockCountRow)
+
+				// Mock data query with scan error
 				mockRows := mocks.NewRows(t)
 				mockRows.On("Next").Return(true).Once()
 				mockRows.On("Scan", mock.AnythingOfType("*int64")).Return(errors.New("scan error"))
@@ -327,8 +420,38 @@ func TestRepository_GetFollowers(t *testing.T) {
 					mock.Anything).Return(mockRows, nil)
 			},
 			want:        nil,
+			wantTotal:   0,
 			wantErr:     true,
 			expectedErr: custom_errors.ErrDatabaseScan,
+		},
+		{
+			name:       "data query error",
+			followeeID: 1,
+			limit:      10,
+			offset:     0,
+			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query success
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 1
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(mockCountRow)
+
+				// Mock data query error
+				db.On("Query",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(nil, errors.New("db error"))
+			},
+			want:        nil,
+			wantTotal:   0,
+			wantErr:     true,
+			expectedErr: custom_errors.ErrDatabaseQuery,
 		},
 	}
 
@@ -342,7 +465,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 			}
 
 			repo := repository_postgres.NewFollowRepository(mockDB, log)
-			got, err := repo.GetFollowers(context.Background(), tt.followeeID, tt.limit, tt.offset)
+			got, total, err := repo.GetFollowers(context.Background(), tt.followeeID, tt.limit, tt.offset)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
@@ -351,6 +474,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.want, got)
+				assert.Equal(t, tt.wantTotal, total)
 			}
 		})
 	}
@@ -364,6 +488,7 @@ func TestRepository_GetFollowees(t *testing.T) {
 		offset      int32
 		mockSetup   func(*mocks.PgDB)
 		want        []int64
+		wantTotal   int64
 		wantErr     bool
 		expectedErr error
 		checkQuery  bool
@@ -374,10 +499,39 @@ func TestRepository_GetFollowees(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 5
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT COUNT(*) 
+		FROM followers 
+		WHERE follower_id = @follower_id
+	`
+					}),
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["follower_id"] == int64(1)
+					})).Return(mockCountRow)
+
+				// Mock data query
 				rows := setupMockRows(t, []int64{2, 3, 4})
 				db.On("Query",
 					mock.Anything,
-					mock.AnythingOfType("string"),
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT followee_id 
+		FROM followers 
+		WHERE follower_id = @follower_id
+		ORDER BY created_at DESC
+		LIMIT @limit OFFSET @offset
+	`
+					}),
 					mock.MatchedBy(func(args pgx.NamedArgs) bool {
 						return args["follower_id"] == int64(1) &&
 							args["limit"] == int32(10) &&
@@ -385,6 +539,7 @@ func TestRepository_GetFollowees(t *testing.T) {
 					})).Return(rows, nil)
 			},
 			want:       []int64{2, 3, 4},
+			wantTotal:  5,
 			wantErr:    false,
 			checkQuery: true,
 		},
@@ -394,10 +549,39 @@ func TestRepository_GetFollowees(t *testing.T) {
 			limit:      5,
 			offset:     10,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 15
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT COUNT(*) 
+		FROM followers 
+		WHERE follower_id = @follower_id
+	`
+					}),
+					mock.MatchedBy(func(args pgx.NamedArgs) bool {
+						return args["follower_id"] == int64(1)
+					})).Return(mockCountRow)
+
+				// Mock data query
 				rows := setupMockRows(t, []int64{8, 9})
 				db.On("Query",
 					mock.Anything,
-					mock.AnythingOfType("string"),
+					mock.MatchedBy(func(query string) bool {
+						return query == `
+		SELECT followee_id 
+		FROM followers 
+		WHERE follower_id = @follower_id
+		ORDER BY created_at DESC
+		LIMIT @limit OFFSET @offset
+	`
+					}),
 					mock.MatchedBy(func(args pgx.NamedArgs) bool {
 						return args["follower_id"] == int64(1) &&
 							args["limit"] == int32(5) &&
@@ -405,6 +589,7 @@ func TestRepository_GetFollowees(t *testing.T) {
 					})).Return(rows, nil)
 			},
 			want:       []int64{8, 9},
+			wantTotal:  15,
 			wantErr:    false,
 			checkQuery: true,
 		},
@@ -414,14 +599,28 @@ func TestRepository_GetFollowees(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 0
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(mockCountRow)
+
+				// Mock data query
 				rows := setupMockRows(t, []int64{})
 				db.On("Query",
 					mock.Anything,
 					mock.AnythingOfType("string"),
 					mock.Anything).Return(rows, nil)
 			},
-			want:    []int64{},
-			wantErr: false,
+			want:      []int64{},
+			wantTotal: 0,
+			wantErr:   false,
 		},
 		{
 			name:       "database query error",
@@ -429,12 +628,45 @@ func TestRepository_GetFollowees(t *testing.T) {
 			limit:      10,
 			offset:     0,
 			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query error
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).Return(errors.New("db error"))
+				db.On("QueryRow",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(mockCountRow)
+			},
+			want:        nil,
+			wantTotal:   0,
+			wantErr:     true,
+			expectedErr: custom_errors.ErrDatabaseQuery,
+		},
+		{
+			name:       "data query error",
+			followerID: 1,
+			limit:      10,
+			offset:     0,
+			mockSetup: func(db *mocks.PgDB) {
+				// Mock count query success
+				mockCountRow := new(mocks.Row)
+				mockCountRow.On("Scan", mock.AnythingOfType("*int64")).
+					Run(func(args mock.Arguments) {
+						arg := args.Get(0).(*int64)
+						*arg = 1
+					}).Return(nil)
+				db.On("QueryRow",
+					mock.Anything,
+					mock.AnythingOfType("string"),
+					mock.Anything).Return(mockCountRow)
+
+				// Mock data query error
 				db.On("Query",
 					mock.Anything,
 					mock.AnythingOfType("string"),
 					mock.Anything).Return(nil, errors.New("db error"))
 			},
 			want:        nil,
+			wantTotal:   0,
 			wantErr:     true,
 			expectedErr: custom_errors.ErrDatabaseQuery,
 		},
@@ -450,7 +682,7 @@ func TestRepository_GetFollowees(t *testing.T) {
 			}
 
 			repo := repository_postgres.NewFollowRepository(mockDB, log)
-			got, err := repo.GetFollowees(context.Background(), tt.followerID, tt.limit, tt.offset)
+			got, total, err := repo.GetFollowees(context.Background(), tt.followerID, tt.limit, tt.offset)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
@@ -459,6 +691,7 @@ func TestRepository_GetFollowees(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.want, got)
+				assert.Equal(t, tt.wantTotal, total)
 			}
 		})
 	}
