@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	follow_grpc "pinstack-relation-service/internal/delivery/grpc"
+	"pinstack-relation-service/internal/model"
+	"pinstack-relation-service/internal/utils"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -26,7 +28,8 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 		wantErr        bool
 		expectedCode   codes.Code
 		expectedErrMsg string
-		expectedIDs    []int64
+		expectedUsers  []*model.User
+		expectedTotal  int64
 	}{
 		{
 			name: "successful get followers",
@@ -36,11 +39,21 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 				Page:       1,
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
+				users := []*model.User{
+					{ID: 2, Username: "user2", AvatarURL: utils.StringPtr("avatar2.jpg")},
+					{ID: 3, Username: "user3", AvatarURL: nil},
+					{ID: 4, Username: "user4", AvatarURL: utils.StringPtr("avatar4.jpg")},
+				}
 				mockService.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(1)).
-					Return([]int64{2, 3, 4}, nil)
+					Return(users, int64(25), nil)
 			},
-			wantErr:     false,
-			expectedIDs: []int64{2, 3, 4},
+			wantErr: false,
+			expectedUsers: []*model.User{
+				{ID: 2, Username: "user2", AvatarURL: utils.StringPtr("avatar2.jpg")},
+				{ID: 3, Username: "user3", AvatarURL: nil},
+				{ID: 4, Username: "user4", AvatarURL: utils.StringPtr("avatar4.jpg")},
+			},
+			expectedTotal: 25,
 		},
 		{
 			name: "empty result",
@@ -51,10 +64,11 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
 				mockService.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(1)).
-					Return([]int64{}, nil)
+					Return([]*model.User{}, int64(0), nil)
 			},
-			wantErr:     false,
-			expectedIDs: []int64{},
+			wantErr:       false,
+			expectedUsers: []*model.User{},
+			expectedTotal: 0,
 		},
 		{
 			name: "validation error - followee ID zero",
@@ -113,7 +127,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
 				mockService.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(1)).
-					Return([]int64{}, custom_errors.ErrUserNotFound)
+					Return([]*model.User{}, int64(0), custom_errors.ErrUserNotFound)
 			},
 			wantErr:        true,
 			expectedCode:   codes.NotFound,
@@ -128,7 +142,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
 				mockService.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(1)).
-					Return([]int64{}, custom_errors.ErrDatabaseQuery)
+					Return([]*model.User{}, int64(0), custom_errors.ErrDatabaseQuery)
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
@@ -143,7 +157,7 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			},
 			mockSetup: func(mockService *mocks.FollowService) {
 				mockService.On("GetFollowers", mock.Anything, int64(1), int32(10), int32(1)).
-					Return([]int64{}, errors.New("unexpected error"))
+					Return([]*model.User{}, int64(0), errors.New("unexpected error"))
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
@@ -173,8 +187,18 @@ func TestGetFollowersHandler_GetFollowers(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				assert.Equal(t, len(tt.expectedIDs), len(resp.FollowerIds))
-				assert.ElementsMatch(t, tt.expectedIDs, resp.FollowerIds)
+				assert.Equal(t, len(tt.expectedUsers), len(resp.Followers))
+				assert.Equal(t, tt.expectedTotal, resp.Total)
+
+				for i, expectedUser := range tt.expectedUsers {
+					assert.Equal(t, expectedUser.ID, resp.Followers[i].FollowerId)
+					assert.Equal(t, expectedUser.Username, resp.Followers[i].Username)
+					if expectedUser.AvatarURL != nil {
+						assert.Equal(t, *expectedUser.AvatarURL, *resp.Followers[i].AvatarUrl)
+					} else {
+						assert.Nil(t, resp.Followers[i].AvatarUrl)
+					}
+				}
 			}
 
 			mockService.AssertExpectations(t)
