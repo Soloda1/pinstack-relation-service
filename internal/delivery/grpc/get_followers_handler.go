@@ -3,6 +3,7 @@ package follow_grpc
 import (
 	"context"
 	"errors"
+	"pinstack-relation-service/internal/model"
 
 	"github.com/go-playground/validator/v10"
 	pb "github.com/soloda1/pinstack-proto-definitions/gen/go/pinstack-proto-definitions/relation/v1"
@@ -13,7 +14,7 @@ import (
 )
 
 type FollowersGetter interface {
-	GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]int64, error)
+	GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]*model.User, int64, error)
 }
 
 type GetFollowersHandler struct {
@@ -46,7 +47,7 @@ func (h *GetFollowersHandler) GetFollowers(ctx context.Context, req *pb.GetFollo
 		return nil, status.Error(codes.InvalidArgument, custom_errors.ErrValidationFailed.Error())
 	}
 
-	followerIDs, err := h.relationService.GetFollowers(ctx, req.GetFolloweeId(), req.GetLimit(), req.GetPage())
+	followers, total, err := h.relationService.GetFollowers(ctx, req.GetFolloweeId(), req.GetLimit(), req.GetPage())
 	if err != nil {
 		switch {
 		case errors.Is(err, custom_errors.ErrUserNotFound):
@@ -58,7 +59,20 @@ func (h *GetFollowersHandler) GetFollowers(ctx context.Context, req *pb.GetFollo
 		}
 	}
 
+	pbFollowers := make([]*pb.User, 0, len(followers))
+	for _, follower := range followers {
+		pbUser := &pb.User{
+			FollowerId: follower.ID,
+			Username:   follower.Username,
+		}
+		if follower.AvatarURL != nil {
+			pbUser.AvatarUrl = follower.AvatarURL
+		}
+		pbFollowers = append(pbFollowers, pbUser)
+	}
+
 	return &pb.GetFollowersResponse{
-		FollowerIds: followerIDs,
+		Followers: pbFollowers,
+		Total:     total,
 	}, nil
 }

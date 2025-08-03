@@ -140,7 +140,7 @@ func (s *Service) Unfollow(ctx context.Context, followerID, followeeID int64) er
 	return nil
 }
 
-func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]int64, error) {
+func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, page int32) ([]*model.User, int64, error) {
 	s.log.Info("GetFollowers request received", slog.Int64("followeeID", followeeID))
 	_, err := s.userClient.GetUser(ctx, followeeID)
 	if err != nil {
@@ -148,23 +148,38 @@ func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, pag
 		switch {
 		case errors.Is(err, custom_errors.ErrUserNotFound):
 			s.log.Debug("User not found in GetFollowers", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
-			return nil, custom_errors.ErrUserNotFound
+			return nil, 0, custom_errors.ErrUserNotFound
 		default:
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	limit, offset := utils.SetPaginationDefaults(limit, page)
-	followers, err := s.followRepo.GetFollowers(ctx, followeeID, limit, offset)
+	followerIDs, total, err := s.followRepo.GetFollowers(ctx, followeeID, limit, offset)
 	if err != nil {
 		s.log.Error("Error getting followers", slog.String("error", err.Error()))
-		return nil, err
+		return nil, 0, err
 	}
 
-	s.log.Info("Followers retrieved successfully", slog.Int64("followeeID", followeeID), slog.Int("count", len(followers)))
-	return followers, nil
+	followers := make([]*model.User, 0, len(followerIDs))
+	for _, followerID := range followerIDs {
+		user, err := s.userClient.GetUser(ctx, followerID)
+		if err != nil {
+			s.log.Error("Failed to get follower user", slog.Int64("followerID", followerID), slog.String("error", err.Error()))
+			missingUser := &model.User{
+				ID:       followerID,
+				Username: "Missing user",
+				Email:    "Missing user",
+			}
+			user = missingUser
+		}
+		followers = append(followers, user)
+	}
+
+	s.log.Info("Followers retrieved successfully", slog.Int64("followeeID", followeeID), slog.Int("count", len(followers)), slog.Int64("total", total))
+	return followers, total, nil
 }
 
-func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, page int32) ([]int64, error) {
+func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, page int32) ([]*model.User, int64, error) {
 	s.log.Info("GetFollowees request received", slog.Int64("followerID", followerID))
 	_, err := s.userClient.GetUser(ctx, followerID)
 	if err != nil {
@@ -172,18 +187,33 @@ func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, pag
 		switch {
 		case errors.Is(err, custom_errors.ErrUserNotFound):
 			s.log.Debug("User not found in GetFollowees", slog.Int64("followerID", followerID), slog.String("error", err.Error()))
-			return nil, custom_errors.ErrUserNotFound
+			return nil, 0, custom_errors.ErrUserNotFound
 		default:
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	limit, offset := utils.SetPaginationDefaults(limit, page)
-	followees, err := s.followRepo.GetFollowees(ctx, followerID, limit, offset)
+	followeeIDs, total, err := s.followRepo.GetFollowees(ctx, followerID, limit, offset)
 	if err != nil {
 		s.log.Error("Error getting followees", slog.String("error", err.Error()))
-		return nil, err
+		return nil, 0, err
 	}
 
-	s.log.Info("Followees retrieved successfully", slog.Int64("followerID", followerID), slog.Int("count", len(followees)))
-	return followees, nil
+	followees := make([]*model.User, 0, len(followeeIDs))
+	for _, followeeID := range followeeIDs {
+		user, err := s.userClient.GetUser(ctx, followeeID)
+		if err != nil {
+			s.log.Error("Failed to get followee user", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
+			missingUser := &model.User{
+				ID:       followeeID,
+				Username: "Missing user",
+				Email:    "Missing user",
+			}
+			user = missingUser
+		}
+		followees = append(followees, user)
+	}
+
+	s.log.Info("Followees retrieved successfully", slog.Int64("followerID", followerID), slog.Int("count", len(followees)), slog.Int64("total", total))
+	return followees, total, nil
 }

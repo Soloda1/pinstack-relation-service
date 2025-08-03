@@ -12,3 +12,8 @@ func SetPaginationDefaults(limit, page int32) (int32, int32) {
 	offset := (page - 1) * limit
 	return limit, offset
 }
+
+// Helper function to create string pointer
+func StringPtr(s string) *string {
+	return &s
+}

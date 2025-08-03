@@ -187,7 +187,7 @@ func (_c *FollowRepository_Exists_Call) RunAndReturn(run func(context.Context, i
 }
 
 // GetFollowees provides a mock function with given fields: ctx, followerID, limit, offset
-func (_m *FollowRepository) GetFollowees(ctx context.Context, followerID int64, limit int32, offset int32) ([]int64, error) {
+func (_m *FollowRepository) GetFollowees(ctx context.Context, followerID int64, limit int32, offset int32) ([]int64, int64, error) {
 	ret := _m.Called(ctx, followerID, limit, offset)
 
 	if len(ret) == 0 {
@@ -195,8 +195,9 @@ func (_m *FollowRepository) GetFollowees(ctx context.Context, followerID int64, 
 	}
 
 	var r0 []int64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]int64, error)); ok {
+	var r1 int64
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]int64, int64, error)); ok {
 		return rf(ctx, followerID, limit, offset)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) []int64); ok {
@@ -207,13 +208,19 @@ func (_m *FollowRepository) GetFollowees(ctx context.Context, followerID int64, 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) int64); ok {
 		r1 = rf(ctx, followerID, limit, offset)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(int64)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, int64, int32, int32) error); ok {
+		r2 = rf(ctx, followerID, limit, offset)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // FollowRepository_GetFollowees_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFollowees'
@@ -237,18 +244,18 @@ func (_c *FollowRepository_GetFollowees_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *FollowRepository_GetFollowees_Call) Return(_a0 []int64, _a1 error) *FollowRepository_GetFollowees_Call {
-	_c.Call.Return(_a0, _a1)
+func (_c *FollowRepository_GetFollowees_Call) Return(_a0 []int64, _a1 int64, _a2 error) *FollowRepository_GetFollowees_Call {
+	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *FollowRepository_GetFollowees_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]int64, error)) *FollowRepository_GetFollowees_Call {
+func (_c *FollowRepository_GetFollowees_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]int64, int64, error)) *FollowRepository_GetFollowees_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetFollowers provides a mock function with given fields: ctx, followeeID, limit, offset
-func (_m *FollowRepository) GetFollowers(ctx context.Context, followeeID int64, limit int32, offset int32) ([]int64, error) {
+func (_m *FollowRepository) GetFollowers(ctx context.Context, followeeID int64, limit int32, offset int32) ([]int64, int64, error) {
 	ret := _m.Called(ctx, followeeID, limit, offset)
 
 	if len(ret) == 0 {
@@ -256,8 +263,9 @@ func (_m *FollowRepository) GetFollowers(ctx context.Context, followeeID int64, 
 	}
 
 	var r0 []int64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]int64, error)); ok {
+	var r1 int64
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]int64, int64, error)); ok {
 		return rf(ctx, followeeID, limit, offset)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) []int64); ok {
@@ -268,13 +276,19 @@ func (_m *FollowRepository) GetFollowers(ctx context.Context, followeeID int64, 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) int64); ok {
 		r1 = rf(ctx, followeeID, limit, offset)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(int64)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, int64, int32, int32) error); ok {
+		r2 = rf(ctx, followeeID, limit, offset)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // FollowRepository_GetFollowers_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFollowers'
@@ -298,12 +312,12 @@ func (_c *FollowRepository_GetFollowers_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *FollowRepository_GetFollowers_Call) Return(_a0 []int64, _a1 error) *FollowRepository_GetFollowers_Call {
-	_c.Call.Return(_a0, _a1)
+func (_c *FollowRepository_GetFollowers_Call) Return(_a0 []int64, _a1 int64, _a2 error) *FollowRepository_GetFollowers_Call {
+	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *FollowRepository_GetFollowers_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]int64, error)) *FollowRepository_GetFollowers_Call {
+func (_c *FollowRepository_GetFollowers_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]int64, int64, error)) *FollowRepository_GetFollowers_Call {
 	_c.Call.Return(run)
 	return _c
 }
