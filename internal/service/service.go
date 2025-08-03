@@ -165,7 +165,12 @@ func (s *Service) GetFollowers(ctx context.Context, followeeID int64, limit, pag
 		user, err := s.userClient.GetUser(ctx, followerID)
 		if err != nil {
 			s.log.Error("Failed to get follower user", slog.Int64("followerID", followerID), slog.String("error", err.Error()))
-			continue
+			missingUser := &model.User{
+				ID:       followerID,
+				Username: "Missing user",
+				Email:    "Missing user",
+			}
+			user = missingUser
 		}
 		followers = append(followers, user)
 	}
@@ -199,7 +204,12 @@ func (s *Service) GetFollowees(ctx context.Context, followerID int64, limit, pag
 		user, err := s.userClient.GetUser(ctx, followeeID)
 		if err != nil {
 			s.log.Error("Failed to get followee user", slog.Int64("followeeID", followeeID), slog.String("error", err.Error()))
-			continue
+			missingUser := &model.User{
+				ID:       followeeID,
+				Username: "Missing user",
+				Email:    "Missing user",
+			}
+			user = missingUser
 		}
 		followees = append(followees, user)
 	}

@@ -413,10 +413,12 @@ func TestService_GetFollowers(t *testing.T) {
 		followers, total, err := svc.GetFollowers(ctx, followeeID, limit, page)
 
 		require.NoError(t, err)
-		assert.Len(t, followers, 2)
+		assert.Len(t, followers, 3) // Теперь ожидаем 3 пользователей (включая мокового)
 		assert.Equal(t, expectedTotal, total)
 		assert.Equal(t, int64(1), followers[0].ID)
-		assert.Equal(t, int64(5), followers[1].ID)
+		assert.Equal(t, int64(3), followers[1].ID) // Моковый пользователь
+		assert.Equal(t, "Missing user", followers[1].Username)
+		assert.Equal(t, int64(5), followers[2].ID)
 		mockFollowRepo.AssertExpectations(t)
 		mockUserClient.AssertExpectations(t)
 	})
@@ -526,10 +528,12 @@ func TestService_GetFollowees(t *testing.T) {
 		followees, total, err := svc.GetFollowees(ctx, followerID, limit, page)
 
 		require.NoError(t, err)
-		assert.Len(t, followees, 2)
+		assert.Len(t, followees, 3) // Теперь ожидаем 3 пользователей (включая мокового)
 		assert.Equal(t, expectedTotal, total)
 		assert.Equal(t, int64(2), followees[0].ID)
-		assert.Equal(t, int64(6), followees[1].ID)
+		assert.Equal(t, int64(4), followees[1].ID) // Моковый пользователь
+		assert.Equal(t, "Missing user", followees[1].Username)
+		assert.Equal(t, int64(6), followees[2].ID)
 		mockFollowRepo.AssertExpectations(t)
 		mockUserClient.AssertExpectations(t)
 	})
