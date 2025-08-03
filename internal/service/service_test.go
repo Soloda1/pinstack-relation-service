@@ -315,16 +315,26 @@ func TestService_GetFollowers(t *testing.T) {
 		ctx := context.Background()
 		followeeID := int64(2)
 		limit, page := int32(10), int32(1)
-		expectedFollowers := []int64{1, 3, 5}
+		expectedFollowerIDs := []int64{1, 3, 5}
+		expectedTotal := int64(15)
 
 		mockUserClient.On("GetUser", ctx, followeeID).Return(&model.User{ID: followeeID}, nil)
 
-		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(expectedFollowers, nil)
+		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(expectedFollowerIDs, expectedTotal, nil)
 
-		followers, err := svc.GetFollowers(ctx, followeeID, limit, page)
+		// Мокаем получение пользователей по их ID
+		for _, followerID := range expectedFollowerIDs {
+			mockUserClient.On("GetUser", ctx, followerID).Return(&model.User{ID: followerID}, nil)
+		}
+
+		followers, total, err := svc.GetFollowers(ctx, followeeID, limit, page)
 
 		require.NoError(t, err)
-		assert.Equal(t, expectedFollowers, followers)
+		assert.Len(t, followers, len(expectedFollowerIDs))
+		assert.Equal(t, expectedTotal, total)
+		for i, follower := range followers {
+			assert.Equal(t, expectedFollowerIDs[i], follower.ID)
+		}
 		mockFollowRepo.AssertExpectations(t)
 		mockUserClient.AssertExpectations(t)
 	})
@@ -337,11 +347,12 @@ func TestService_GetFollowers(t *testing.T) {
 
 		mockUserClient.On("GetUser", ctx, followeeID).Return(nil, custom_errors.ErrUserNotFound)
 
-		followers, err := svc.GetFollowers(ctx, followeeID, limit, page)
+		followers, total, err := svc.GetFollowers(ctx, followeeID, limit, page)
 
 		assert.Error(t, err)
 		assert.Equal(t, custom_errors.ErrUserNotFound, err)
 		assert.Nil(t, followers)
+		assert.Equal(t, int64(0), total)
 		mockFollowRepo.AssertNotCalled(t, "GetFollowers")
 		mockUserClient.AssertExpectations(t)
 	})
@@ -355,11 +366,12 @@ func TestService_GetFollowers(t *testing.T) {
 		networkErr := errors.New("network timeout")
 		mockUserClient.On("GetUser", ctx, followeeID).Return(nil, networkErr)
 
-		followers, err := svc.GetFollowers(ctx, followeeID, limit, page)
+		followers, total, err := svc.GetFollowers(ctx, followeeID, limit, page)
 
 		assert.Error(t, err)
 		assert.Equal(t, networkErr, err)
 		assert.Nil(t, followers)
+		assert.Equal(t, int64(0), total)
 		mockFollowRepo.AssertNotCalled(t, "GetFollowers")
 		mockUserClient.AssertExpectations(t)
 	})
@@ -372,12 +384,41 @@ func TestService_GetFollowers(t *testing.T) {
 
 		mockUserClient.On("GetUser", ctx, followeeID).Return(&model.User{ID: followeeID}, nil)
 
-		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(nil, errors.New("db error"))
+		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(nil, int64(0), errors.New("db error"))
 
-		followers, err := svc.GetFollowers(ctx, followeeID, limit, page)
+		followers, total, err := svc.GetFollowers(ctx, followeeID, limit, page)
 
 		assert.Error(t, err)
 		assert.Nil(t, followers)
+		assert.Equal(t, int64(0), total)
+		mockFollowRepo.AssertExpectations(t)
+		mockUserClient.AssertExpectations(t)
+	})
+
+	t.Run("частичная ошибка при получении информации о подписчиках", func(t *testing.T) {
+		svc, mockFollowRepo, _, _, _, mockUserClient := setupTest(t)
+		ctx := context.Background()
+		followeeID := int64(2)
+		limit, page := int32(10), int32(1)
+		expectedFollowerIDs := []int64{1, 3, 5}
+		expectedTotal := int64(15)
+
+		mockUserClient.On("GetUser", ctx, followeeID).Return(&model.User{ID: followeeID}, nil)
+
+		mockFollowRepo.On("GetFollowers", ctx, followeeID, limit, int32(0)).Return(expectedFollowerIDs, expectedTotal, nil)
+
+		// Мокаем получение пользователей по их ID - один пользователь не найден
+		mockUserClient.On("GetUser", ctx, int64(1)).Return(&model.User{ID: 1}, nil)
+		mockUserClient.On("GetUser", ctx, int64(3)).Return(nil, custom_errors.ErrUserNotFound) // Пользователь удален
+		mockUserClient.On("GetUser", ctx, int64(5)).Return(&model.User{ID: 5}, nil)
+
+		followers, total, err := svc.GetFollowers(ctx, followeeID, limit, page)
+
+		require.NoError(t, err)
+		assert.Len(t, followers, 2) // Только 2 пользователя, так как один был не найден
+		assert.Equal(t, expectedTotal, total)
+		assert.Equal(t, int64(1), followers[0].ID)
+		assert.Equal(t, int64(5), followers[1].ID)
 		mockFollowRepo.AssertExpectations(t)
 		mockUserClient.AssertExpectations(t)
 	})
@@ -389,16 +430,26 @@ func TestService_GetFollowees(t *testing.T) {
 		ctx := context.Background()
 		followerID := int64(1)
 		limit, page := int32(10), int32(1)
-		expectedFollowees := []int64{2, 4, 6}
+		expectedFolloweeIDs := []int64{2, 4, 6}
+		expectedTotal := int64(20)
 
 		mockUserClient.On("GetUser", ctx, followerID).Return(&model.User{ID: followerID}, nil)
 
-		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(expectedFollowees, nil)
+		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(expectedFolloweeIDs, expectedTotal, nil)
 
-		followees, err := svc.GetFollowees(ctx, followerID, limit, page)
+		// Мокаем получение пользователей по их ID
+		for _, followeeID := range expectedFolloweeIDs {
+			mockUserClient.On("GetUser", ctx, followeeID).Return(&model.User{ID: followeeID}, nil)
+		}
+
+		followees, total, err := svc.GetFollowees(ctx, followerID, limit, page)
 
 		require.NoError(t, err)
-		assert.Equal(t, expectedFollowees, followees)
+		assert.Len(t, followees, len(expectedFolloweeIDs))
+		assert.Equal(t, expectedTotal, total)
+		for i, followee := range followees {
+			assert.Equal(t, expectedFolloweeIDs[i], followee.ID)
+		}
 		mockFollowRepo.AssertExpectations(t)
 		mockUserClient.AssertExpectations(t)
 	})
@@ -411,11 +462,12 @@ func TestService_GetFollowees(t *testing.T) {
 
 		mockUserClient.On("GetUser", ctx, followerID).Return(nil, custom_errors.ErrUserNotFound)
 
-		followees, err := svc.GetFollowees(ctx, followerID, limit, page)
+		followees, total, err := svc.GetFollowees(ctx, followerID, limit, page)
 
 		assert.Error(t, err)
 		assert.Equal(t, custom_errors.ErrUserNotFound, err)
 		assert.Nil(t, followees)
+		assert.Equal(t, int64(0), total)
 		mockFollowRepo.AssertNotCalled(t, "GetFollowees")
 		mockUserClient.AssertExpectations(t)
 	})
@@ -429,11 +481,12 @@ func TestService_GetFollowees(t *testing.T) {
 		networkErr := errors.New("network timeout")
 		mockUserClient.On("GetUser", ctx, followerID).Return(nil, networkErr)
 
-		followees, err := svc.GetFollowees(ctx, followerID, limit, page)
+		followees, total, err := svc.GetFollowees(ctx, followerID, limit, page)
 
 		assert.Error(t, err)
 		assert.Equal(t, networkErr, err)
 		assert.Nil(t, followees)
+		assert.Equal(t, int64(0), total)
 		mockFollowRepo.AssertNotCalled(t, "GetFollowees")
 		mockUserClient.AssertExpectations(t)
 	})
@@ -446,12 +499,41 @@ func TestService_GetFollowees(t *testing.T) {
 
 		mockUserClient.On("GetUser", ctx, followerID).Return(&model.User{ID: followerID}, nil)
 
-		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(nil, errors.New("db error"))
+		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(nil, int64(0), errors.New("db error"))
 
-		followees, err := svc.GetFollowees(ctx, followerID, limit, page)
+		followees, total, err := svc.GetFollowees(ctx, followerID, limit, page)
 
 		assert.Error(t, err)
 		assert.Nil(t, followees)
+		assert.Equal(t, int64(0), total)
+		mockFollowRepo.AssertExpectations(t)
+		mockUserClient.AssertExpectations(t)
+	})
+
+	t.Run("частичная ошибка при получении информации о подписках", func(t *testing.T) {
+		svc, mockFollowRepo, _, _, _, mockUserClient := setupTest(t)
+		ctx := context.Background()
+		followerID := int64(1)
+		limit, page := int32(10), int32(1)
+		expectedFolloweeIDs := []int64{2, 4, 6}
+		expectedTotal := int64(20)
+
+		mockUserClient.On("GetUser", ctx, followerID).Return(&model.User{ID: followerID}, nil)
+
+		mockFollowRepo.On("GetFollowees", ctx, followerID, limit, int32(0)).Return(expectedFolloweeIDs, expectedTotal, nil)
+
+		// Мокаем получение пользователей по их ID - один пользователь не найден
+		mockUserClient.On("GetUser", ctx, int64(2)).Return(&model.User{ID: 2}, nil)
+		mockUserClient.On("GetUser", ctx, int64(4)).Return(nil, custom_errors.ErrUserNotFound) // Пользователь удален
+		mockUserClient.On("GetUser", ctx, int64(6)).Return(&model.User{ID: 6}, nil)
+
+		followees, total, err := svc.GetFollowees(ctx, followerID, limit, page)
+
+		require.NoError(t, err)
+		assert.Len(t, followees, 2) // Только 2 пользователя, так как один был не найден
+		assert.Equal(t, expectedTotal, total)
+		assert.Equal(t, int64(2), followees[0].ID)
+		assert.Equal(t, int64(6), followees[1].ID)
 		mockFollowRepo.AssertExpectations(t)
 		mockUserClient.AssertExpectations(t)
 	})

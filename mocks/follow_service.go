@@ -4,6 +4,7 @@ package mocks
 
 import (
 	context "context"
+	model "pinstack-relation-service/internal/model"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -70,33 +71,40 @@ func (_c *FollowService_Follow_Call) RunAndReturn(run func(context.Context, int6
 }
 
 // GetFollowees provides a mock function with given fields: ctx, followerID, limit, page
-func (_m *FollowService) GetFollowees(ctx context.Context, followerID int64, limit int32, page int32) ([]int64, error) {
+func (_m *FollowService) GetFollowees(ctx context.Context, followerID int64, limit int32, page int32) ([]*model.User, int64, error) {
 	ret := _m.Called(ctx, followerID, limit, page)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetFollowees")
 	}
 
-	var r0 []int64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]int64, error)); ok {
+	var r0 []*model.User
+	var r1 int64
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]*model.User, int64, error)); ok {
 		return rf(ctx, followerID, limit, page)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) []int64); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) []*model.User); ok {
 		r0 = rf(ctx, followerID, limit, page)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]int64)
+			r0 = ret.Get(0).([]*model.User)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) int64); ok {
 		r1 = rf(ctx, followerID, limit, page)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(int64)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, int64, int32, int32) error); ok {
+		r2 = rf(ctx, followerID, limit, page)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // FollowService_GetFollowees_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFollowees'
@@ -120,44 +128,51 @@ func (_c *FollowService_GetFollowees_Call) Run(run func(ctx context.Context, fol
 	return _c
 }
 
-func (_c *FollowService_GetFollowees_Call) Return(_a0 []int64, _a1 error) *FollowService_GetFollowees_Call {
-	_c.Call.Return(_a0, _a1)
+func (_c *FollowService_GetFollowees_Call) Return(_a0 []*model.User, _a1 int64, _a2 error) *FollowService_GetFollowees_Call {
+	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *FollowService_GetFollowees_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]int64, error)) *FollowService_GetFollowees_Call {
+func (_c *FollowService_GetFollowees_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]*model.User, int64, error)) *FollowService_GetFollowees_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetFollowers provides a mock function with given fields: ctx, followeeID, limit, page
-func (_m *FollowService) GetFollowers(ctx context.Context, followeeID int64, limit int32, page int32) ([]int64, error) {
+func (_m *FollowService) GetFollowers(ctx context.Context, followeeID int64, limit int32, page int32) ([]*model.User, int64, error) {
 	ret := _m.Called(ctx, followeeID, limit, page)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetFollowers")
 	}
 
-	var r0 []int64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]int64, error)); ok {
+	var r0 []*model.User
+	var r1 int64
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) ([]*model.User, int64, error)); ok {
 		return rf(ctx, followeeID, limit, page)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) []int64); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int32, int32) []*model.User); ok {
 		r0 = rf(ctx, followeeID, limit, page)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]int64)
+			r0 = ret.Get(0).([]*model.User)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, int64, int32, int32) int64); ok {
 		r1 = rf(ctx, followeeID, limit, page)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(int64)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, int64, int32, int32) error); ok {
+		r2 = rf(ctx, followeeID, limit, page)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // FollowService_GetFollowers_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFollowers'
@@ -181,12 +196,12 @@ func (_c *FollowService_GetFollowers_Call) Run(run func(ctx context.Context, fol
 	return _c
 }
 
-func (_c *FollowService_GetFollowers_Call) Return(_a0 []int64, _a1 error) *FollowService_GetFollowers_Call {
-	_c.Call.Return(_a0, _a1)
+func (_c *FollowService_GetFollowers_Call) Return(_a0 []*model.User, _a1 int64, _a2 error) *FollowService_GetFollowers_Call {
+	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *FollowService_GetFollowers_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]int64, error)) *FollowService_GetFollowers_Call {
+func (_c *FollowService_GetFollowers_Call) RunAndReturn(run func(context.Context, int64, int32, int32) ([]*model.User, int64, error)) *FollowService_GetFollowers_Call {
 	_c.Call.Return(run)
 	return _c
 }
