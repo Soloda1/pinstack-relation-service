@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"pinstack-relation-service/internal/custom_errors"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
 	"pinstack-relation-service/mocks"

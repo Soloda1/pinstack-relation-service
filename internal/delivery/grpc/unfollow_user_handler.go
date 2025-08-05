@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"pinstack-relation-service/internal/custom_errors"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 )
 
 type UnfollowDeleter interface {
@@ -54,7 +54,7 @@ func (h *UnfollowHandler) Unfollow(ctx context.Context, req *pb.UnfollowRequest)
 		case errors.Is(err, custom_errors.ErrSelfUnfollow):
 			return nil, status.Error(codes.InvalidArgument, custom_errors.ErrSelfUnfollow.Error())
 		default:
-			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())
+			return nil, status.Error(codes.Internal, custom_errors.ErrExternalServiceError.Error())
 		}
 	}
 

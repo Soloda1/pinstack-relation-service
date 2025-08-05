@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"pinstack-relation-service/internal/custom_errors"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 )
 
 type FolloweesGetter interface {
@@ -55,7 +55,7 @@ func (h *GetFolloweesHandler) GetFollowees(ctx context.Context, req *pb.GetFollo
 		case errors.Is(err, custom_errors.ErrDatabaseQuery):
 			return nil, status.Error(codes.Internal, custom_errors.ErrDatabaseQuery.Error())
 		default:
-			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())
+			return nil, status.Error(codes.Internal, custom_errors.ErrExternalServiceError.Error())
 		}
 	}
 

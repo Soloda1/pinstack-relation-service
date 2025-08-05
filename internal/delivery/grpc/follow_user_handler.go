@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"pinstack-relation-service/internal/custom_errors"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 )
 
 type FollowCreator interface {
@@ -54,7 +54,7 @@ func (h *FollowHandler) Follow(ctx context.Context, req *pb.FollowRequest) (*pb.
 		case errors.Is(err, custom_errors.ErrUserNotFound):
 			return nil, status.Error(codes.NotFound, custom_errors.ErrUserNotFound.Error())
 		default:
-			return nil, status.Error(codes.Internal, custom_errors.ErrInternalServiceError.Error())
+			return nil, status.Error(codes.Internal, custom_errors.ErrExternalServiceError.Error())
 		}
 	}
 
