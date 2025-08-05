@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"pinstack-relation-service/internal/custom_errors"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 	"pinstack-relation-service/mocks"
 )
 
@@ -123,7 +123,7 @@ func TestFollowHandler_Follow(t *testing.T) {
 			},
 			wantErr:        true,
 			expectedCode:   codes.Internal,
-			expectedErrMsg: custom_errors.ErrInternalServiceError.Error(),
+			expectedErrMsg: custom_errors.ErrExternalServiceError.Error(),
 		},
 	}
 

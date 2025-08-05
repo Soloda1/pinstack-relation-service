@@ -2,8 +2,8 @@ package repository_postgres
 
 import (
 	"context"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 	"log/slog"
-	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
 
@@ -129,7 +129,7 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 			r.log.Error("Failed to scan follower row",
 				slog.Int64("followee_id", followeeID),
 				slog.String("error", err.Error()))
-			return nil, 0, custom_errors.ErrDatabaseScan
+			return nil, 0, custom_errors.ErrDatabaseQuery
 		}
 		followers = append(followers, followerID)
 	}
@@ -202,7 +202,7 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 			r.log.Error("Failed to scan followee row",
 				slog.Int64("follower_id", followerID),
 				slog.String("error", err.Error()))
-			return nil, 0, custom_errors.ErrDatabaseScan
+			return nil, 0, custom_errors.ErrDatabaseQuery
 		}
 		followees = append(followees, followeeID)
 	}

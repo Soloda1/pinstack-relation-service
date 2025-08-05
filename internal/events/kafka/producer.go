@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 	"log/slog"
 	"pinstack-relation-service/config"
-	"pinstack-relation-service/internal/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
 )

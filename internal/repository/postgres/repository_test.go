@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"pinstack-relation-service/internal/custom_errors"
+	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 	"pinstack-relation-service/internal/logger"
 	"pinstack-relation-service/internal/model"
 	repository_postgres "pinstack-relation-service/internal/repository/postgres"
@@ -408,7 +408,7 @@ func TestRepository_GetFollowers(t *testing.T) {
 			want:        nil,
 			wantTotal:   0,
 			wantErr:     true,
-			expectedErr: custom_errors.ErrDatabaseScan,
+			expectedErr: custom_errors.ErrDatabaseQuery,
 		},
 	}
 
