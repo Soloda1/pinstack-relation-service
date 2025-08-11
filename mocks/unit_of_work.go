@@ -4,7 +4,7 @@ package mocks
 
 import (
 	context "context"
-	uow "pinstack-relation-service/internal/uow"
+	uow "pinstack-relation-service/internal/domain/ports/output/uow"
 
 	mock "github.com/stretchr/testify/mock"
 )
