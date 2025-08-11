@@ -4,25 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"pinstack-relation-service/config"
-	user_client "pinstack-relation-service/internal/clients/user"
-	follow_grpc "pinstack-relation-service/internal/delivery/grpc"
-	"pinstack-relation-service/internal/events/kafka"
-	"pinstack-relation-service/internal/events/outbox"
-	"pinstack-relation-service/internal/logger"
-	repository_postgres "pinstack-relation-service/internal/repository/postgres"
-	"pinstack-relation-service/internal/service"
-	"pinstack-relation-service/internal/uow"
+	"pinstack-relation-service/internal/application/service"
+	"pinstack-relation-service/internal/infrastructure/config"
+	follow_grpc "pinstack-relation-service/internal/infrastructure/inbound/grpc"
+	infra_logger "pinstack-relation-service/internal/infrastructure/logger"
+	user_adapter "pinstack-relation-service/internal/infrastructure/outbound/client/user"
+	kafka_adapter "pinstack-relation-service/internal/infrastructure/outbound/events/kafka"
+	outbox_adapter "pinstack-relation-service/internal/infrastructure/outbound/outbox"
+	repository_postgres "pinstack-relation-service/internal/infrastructure/outbound/repository/postgres"
+	uow_adapter "pinstack-relation-service/internal/infrastructure/outbound/uow"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -34,7 +35,7 @@ func main() {
 		cfg.Database.Port,
 		cfg.Database.DbName)
 	ctx := context.Background()
-	log := logger.New(cfg.Env)
+	log := infra_logger.New(cfg.Env)
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -49,16 +50,16 @@ func main() {
 	}
 	defer pool.Close()
 
-	kafkaProducer, err := kafka.NewProducer(cfg.Kafka, log)
+	kafkaProducer, err := kafka_adapter.NewProducer(cfg.Kafka, log)
 	if err != nil {
 		log.Error("Failed to initialize Kafka producer", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	defer kafkaProducer.Close()
 
-	outboxRepo := outbox.NewOutboxRepository(pool, log)
+	outboxRepo := outbox_adapter.NewOutboxRepository(pool, log)
 
-	outboxWorker := outbox.NewOutboxWorker(
+	outboxWorker := outbox_adapter.NewOutboxWorker(
 		outboxRepo,
 		kafkaProducer,
 		cfg.Outbox,
@@ -68,7 +69,7 @@ func main() {
 	outboxWorker.Start(ctx)
 	defer outboxWorker.Stop()
 
-	unitOfWork := uow.NewPostgresUOW(pool, log)
+	unitOfWork := uow_adapter.NewPostgresUOW(pool, log)
 	followRepo := repository_postgres.NewFollowRepository(pool, log)
 
 	userServiceConn, err := grpc.NewClient(
@@ -86,7 +87,7 @@ func main() {
 		}
 	}(userServiceConn)
 
-	userClient := user_client.NewUserClient(userServiceConn, log)
+	userClient := user_adapter.NewUserClient(userServiceConn, log)
 
 	followService := service.NewFollowService(log, followRepo, unitOfWork, userClient)
 	followGRPCApi := follow_grpc.NewFollowGRPCService(followService, log)

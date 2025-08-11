@@ -1,0 +1,15 @@
+package outbox
+
+import (
+	"context"
+	"pinstack-relation-service/internal/domain/models"
+	"time"
+)
+
+//go:generate mockery --name=OutboxRepository --output=../../../mocks --outpkg=mocks --case=underscore --with-expecter
+type OutboxRepository interface {
+	AddEvent(ctx context.Context, outbox model.OutboxEvent) error
+	GetEventsForProcessing(ctx context.Context, limit int) ([]model.OutboxEvent, error)
+	UpdateEventStatus(ctx context.Context, eventID int64, status model.OutboxStatus, sentAt *time.Time) error
+	MarkEventAsPending(ctx context.Context, eventID int64) error
+}

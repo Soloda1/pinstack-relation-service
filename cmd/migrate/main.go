@@ -4,15 +4,15 @@ import (
 	"flag"
 	"os"
 
-	"pinstack-relation-service/config"
-	"pinstack-relation-service/internal/logger"
-	"pinstack-relation-service/internal/migrator"
+	"pinstack-relation-service/internal/infrastructure/config"
+	infra_logger "pinstack-relation-service/internal/infrastructure/logger"
+	"pinstack-relation-service/internal/infrastructure/outbound/migrator"
 )
 
 func main() {
 	cfg := config.MustLoad()
 
-	log := logger.New(cfg.Env)
+	log := infra_logger.New(cfg.Env)
 
 	command := flag.String("command", "up", "Migration command (up/down)")
 	flag.Parse()
