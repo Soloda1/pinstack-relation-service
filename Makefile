@@ -41,7 +41,7 @@ test-unit: check-go-version
 start-relation-infrastructure: setup-system-tests
 	@echo "🚀 Запуск полной инфраструктуры для интеграционных тестов..."
 	cd $(SYSTEM_TESTS_DIR) && \
-	docker compose -f docker-compose.test.yml up -d \
+	RELATION_SERVICE_CONTEXT=../pinstack-relation-service docker compose -f docker-compose.test.yml up -d \
 		user-db-test \
 		user-migrator-test \
 		user-service-test \
@@ -78,6 +78,8 @@ check-services:
 	@docker logs pinstack-relation-service-test --tail=10
 	@echo "=== API Gateway logs ==="
 	@docker logs pinstack-api-gateway-test --tail=10
+	@echo "=== Kafka logs ==="
+	@docker logs pinstack-kafka-test --tail=5
 
 # Интеграционные тесты только для relation service
 test-relation-integration: start-relation-infrastructure check-services
@@ -181,6 +183,21 @@ logs-db:
 logs-auth-db:
 	cd $(SYSTEM_TESTS_DIR) && \
 	docker compose -f docker-compose.test.yml logs -f auth-db-test
+
+# Быстрый тест с локальным relation-service
+quick-test-local: setup-system-tests
+	@echo "⚡ Быстрый запуск тестов с локальным relation-service..."
+	cd $(SYSTEM_TESTS_DIR) && \
+	RELATION_SERVICE_CONTEXT=../pinstack-relation-service docker compose -f docker-compose.test.yml up -d \
+		user-db-test user-migrator-test user-service-test \
+		auth-db-test auth-migrator-test auth-service-test \
+		api-gateway-test notification-db-test notification-migrator-test notification-service-test \
+		kafka-test kafka-topics-init-test relation-db-test relation-migrator-test relation-service-test
+	@echo "⏳ Ожидание готовности сервисов..."
+	@sleep 30
+	cd $(SYSTEM_TESTS_DIR) && \
+	go test -v -count=1 -timeout=5m ./internal/scenarios/integration/gateway_relation/...
+	$(MAKE) stop-relation-infrastructure
 
 # Очистка
 clean: clean-relation-infrastructure
