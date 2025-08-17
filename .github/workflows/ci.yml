@@ -58,7 +58,7 @@ jobs:
     needs: test
     
     steps:
-    - name: Checkout relation service
+    - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Checkout system tests
@@ -84,6 +84,9 @@ jobs:
     - name: Install dependencies
       run: go mod download
 
+    - name: Create docker network
+      run: docker network create pinstack-test || true
+
     - name: Start Full Infrastructure for Integration Tests
       working-directory: pinstack-system-tests
       env:
@@ -105,7 +108,8 @@ jobs:
           kafka-topics-init-test \
           relation-db-test \
           relation-migrator-test \
-          relation-service-test
+          relation-service-test \
+          redis
 
     - name: Wait for services to be ready
       run: |
@@ -116,6 +120,9 @@ jobs:
         timeout 60 bash -c 'until docker exec pinstack-auth-db-test pg_isready -U postgres; do sleep 2; done'
         timeout 60 bash -c 'until docker exec pinstack-relation-db-test pg_isready -U postgres; do sleep 2; done'
         timeout 60 bash -c 'until docker exec pinstack-notification-db-test pg_isready -U postgres; do sleep 2; done'
+        
+        # Ждем готовности Redis
+        timeout 60 bash -c 'until docker exec pinstack-redis-test redis-cli ping | grep -q PONG; do echo "⏳ Ожидание Redis..."; sleep 2; done'
         
         # Ждем готовности всех сервисов
         sleep 60
@@ -170,6 +177,8 @@ jobs:
         docker compose -f docker-compose.test.yml logs kafka-test
         echo "=== Логи Kafka Topics Init ==="
         docker compose -f docker-compose.test.yml logs kafka-topics-init-test
+        echo "=== Логи Redis ==="
+        docker compose -f docker-compose.test.yml logs redis
         echo "=== Логи API Gateway ==="
         docker compose -f docker-compose.test.yml logs api-gateway-test
 
