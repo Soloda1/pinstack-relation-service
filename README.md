@@ -1,5 +1,4 @@
-# Pinstack Relation Service 💕 Pinstack Relation Service �
-
+# Pinstack Relation Service 💕
 **Pinstack Relation Service** — микросервис для управления связями между пользователями в системе **Pinstack**.
 
 ## Основные функции:
