@@ -23,6 +23,7 @@ type OutboxWorker struct {
 	stopChan  chan struct{}
 	ticker    *time.Ticker
 	semaphore *utils.Semaphore
+	metrics   ports.MetricsProvider
 }
 
 func NewOutboxWorker(
@@ -30,6 +31,7 @@ func NewOutboxWorker(
 	producer kafka.KafkaProducer,
 	config config.OutboxConfig,
 	log ports.Logger,
+	metrics ports.MetricsProvider,
 ) *OutboxWorker {
 	return &OutboxWorker{
 		repo:      repo,
@@ -40,6 +42,7 @@ func NewOutboxWorker(
 		stopChan:  make(chan struct{}),
 		ticker:    time.NewTicker(config.TickInterval()),
 		semaphore: utils.NewSemaphore(config.Concurrency),
+		metrics:   metrics,
 	}
 }
 
@@ -79,8 +82,11 @@ func (wp *OutboxWorker) processBatch(ctx context.Context) {
 	events, err := wp.repo.GetEventsForProcessing(ctx, wp.config.BatchSize)
 	if err != nil {
 		wp.log.Error("Failed to get events for processing", slog.String("error", err.Error()))
+		wp.metrics.IncrementOutboxOperations("get_batch", false)
 		return
 	}
+
+	wp.metrics.IncrementOutboxOperations("get_batch", true)
 
 	if len(events) == 0 {
 		wp.log.Debug("No events to process")
@@ -111,6 +117,18 @@ func (wp *OutboxWorker) worker(ctx context.Context, event model.OutboxEvent) {
 }
 
 func (wp *OutboxWorker) processEvent(ctx context.Context, event model.OutboxEvent) {
+	start := time.Now()
+	var success bool
+	defer func() {
+		wp.metrics.IncrementOutboxOperations("process_event", success)
+		if success {
+			wp.metrics.IncrementKafkaMessages(string(event.EventType), "produce", true)
+			wp.metrics.RecordKafkaMessageDuration(string(event.EventType), "produce", time.Since(start))
+		} else {
+			wp.metrics.IncrementKafkaMessages(string(event.EventType), "produce", false)
+		}
+	}()
+
 	if err := wp.repo.MarkEventAsPending(ctx, event.ID); err != nil {
 		wp.log.Error("Failed to mark event as pending",
 			slog.Int64("event_id", event.ID),
@@ -142,5 +160,6 @@ func (wp *OutboxWorker) processEvent(ctx context.Context, event model.OutboxEven
 		return
 	}
 
+	success = true
 	wp.log.Info("Event successfully processed and sent", slog.Int64("event_id", event.ID))
 }

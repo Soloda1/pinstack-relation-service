@@ -12,15 +12,23 @@ import (
 )
 
 type Repository struct {
-	log ports.Logger
-	db  repository_postgres.PgDB
+	log     ports.Logger
+	db      repository_postgres.PgDB
+	metrics ports.MetricsProvider
 }
 
-func NewOutboxRepository(db repository_postgres.PgDB, log ports.Logger) *Repository {
-	return &Repository{db: db, log: log}
+func NewOutboxRepository(db repository_postgres.PgDB, log ports.Logger, metrics ports.MetricsProvider) *Repository {
+	return &Repository{db: db, log: log, metrics: metrics}
 }
 
-func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) error {
+func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) (err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementOutboxOperations("add_event", err == nil)
+		r.metrics.IncrementDatabaseQueries("outbox_add_event", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("outbox_add_event", time.Since(start))
+	}()
+
 	args := pgx.NamedArgs{
 		"aggregate_id": outbox.AggregateID,
 		"event_type":   outbox.EventType,
@@ -29,7 +37,7 @@ func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) err
 
 	query := `INSERT INTO outbox (aggregate_id, event_type, payload) VALUES (@aggregate_id, @event_type, @payload)`
 
-	_, err := r.db.Exec(ctx, query, args)
+	_, err = r.db.Exec(ctx, query, args)
 	if err != nil {
 		r.log.Error("Failed to add event to outbox", slog.String("error", err.Error()), slog.Int64("aggregate_id", outbox.AggregateID), slog.String("event_type", string(outbox.EventType)))
 		return err
@@ -39,7 +47,14 @@ func (r *Repository) AddEvent(ctx context.Context, outbox model.OutboxEvent) err
 	return nil
 }
 
-func (r *Repository) GetEventsForProcessing(ctx context.Context, limit int) ([]model.OutboxEvent, error) {
+func (r *Repository) GetEventsForProcessing(ctx context.Context, limit int) (events []model.OutboxEvent, err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementOutboxOperations("get_events_for_processing", err == nil)
+		r.metrics.IncrementDatabaseQueries("outbox_get_events", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("outbox_get_events", time.Since(start))
+	}()
+
 	query := `
 		SELECT id, aggregate_id, event_type, payload, status, created_at, sent_at
 		FROM outbox
@@ -58,7 +73,7 @@ func (r *Repository) GetEventsForProcessing(ctx context.Context, limit int) ([]m
 	}
 	defer rows.Close()
 
-	var events []model.OutboxEvent
+	var eventsList []model.OutboxEvent
 	for rows.Next() {
 		var event model.OutboxEvent
 		if err := rows.Scan(
@@ -73,7 +88,7 @@ func (r *Repository) GetEventsForProcessing(ctx context.Context, limit int) ([]m
 			r.log.Error("Failed to scan event row", slog.String("error", err.Error()))
 			return nil, err
 		}
-		events = append(events, event)
+		eventsList = append(eventsList, event)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -81,10 +96,17 @@ func (r *Repository) GetEventsForProcessing(ctx context.Context, limit int) ([]m
 		return nil, err
 	}
 
-	return events, nil
+	return eventsList, nil
 }
 
-func (r *Repository) UpdateEventStatus(ctx context.Context, eventID int64, status model.OutboxStatus, sentAt *time.Time) error {
+func (r *Repository) UpdateEventStatus(ctx context.Context, eventID int64, status model.OutboxStatus, sentAt *time.Time) (err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementOutboxOperations("update_event_status", err == nil)
+		r.metrics.IncrementDatabaseQueries("outbox_update_status", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("outbox_update_status", time.Since(start))
+	}()
+
 	var query string
 	var args pgx.NamedArgs
 
@@ -111,7 +133,7 @@ func (r *Repository) UpdateEventStatus(ctx context.Context, eventID int64, statu
 		}
 	}
 
-	_, err := r.db.Exec(ctx, query, args)
+	_, err = r.db.Exec(ctx, query, args)
 	if err != nil {
 		r.log.Error("Failed to update event status",
 			slog.String("error", err.Error()),
@@ -126,7 +148,14 @@ func (r *Repository) UpdateEventStatus(ctx context.Context, eventID int64, statu
 	return nil
 }
 
-func (r *Repository) MarkEventAsPending(ctx context.Context, eventID int64) error {
+func (r *Repository) MarkEventAsPending(ctx context.Context, eventID int64) (err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementOutboxOperations("mark_event_pending", err == nil)
+		r.metrics.IncrementDatabaseQueries("outbox_mark_pending", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("outbox_mark_pending", time.Since(start))
+	}()
+
 	query := `
 		UPDATE outbox
 		SET status = @status
@@ -138,7 +167,7 @@ func (r *Repository) MarkEventAsPending(ctx context.Context, eventID int64) erro
 		"id":     eventID,
 	}
 
-	_, err := r.db.Exec(ctx, query, args)
+	_, err = r.db.Exec(ctx, query, args)
 	if err != nil {
 		r.log.Error("Failed to mark event as pending",
 			slog.String("error", err.Error()),
