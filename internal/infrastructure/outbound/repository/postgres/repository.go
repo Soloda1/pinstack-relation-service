@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	model "pinstack-relation-service/internal/domain/models"
 	ports "pinstack-relation-service/internal/domain/ports/output"
+	"time"
 
 	"github.com/soloda1/pinstack-proto-definitions/custom_errors"
 
@@ -12,15 +13,22 @@ import (
 )
 
 type Repository struct {
-	log ports.Logger
-	db  PgDB
+	log     ports.Logger
+	db      PgDB
+	metrics ports.MetricsProvider
 }
 
-func NewFollowRepository(db PgDB, log ports.Logger) *Repository {
-	return &Repository{db: db, log: log}
+func NewFollowRepository(db PgDB, log ports.Logger, metrics ports.MetricsProvider) *Repository {
+	return &Repository{db: db, log: log, metrics: metrics}
 }
 
-func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) (model.Follower, error) {
+func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) (follower model.Follower, err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementDatabaseQueries("create_follow_relation", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("create_follow_relation", time.Since(start))
+	}()
+
 	r.log.Info("Creating follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	if followerID == followeeID {
@@ -41,8 +49,8 @@ func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) (
 		RETURNING id, follower_id, followee_id, created_at
 	`
 
-	var follower model.Follower
-	err := r.db.QueryRow(ctx, query, args).Scan(&follower.ID, &follower.FollowerID, &follower.FolloweeID, &follower.CreatedAt)
+	var followerData model.Follower
+	err = r.db.QueryRow(ctx, query, args).Scan(&followerData.ID, &followerData.FollowerID, &followerData.FolloweeID, &followerData.CreatedAt)
 	if err != nil {
 		r.log.Error("Failed to create follow relation",
 			slog.Int64("follower_id", followerID),
@@ -54,10 +62,16 @@ func (r *Repository) Create(ctx context.Context, followerID, followeeID int64) (
 	r.log.Info("Follow relation created successfully",
 		slog.Int64("follower_id", followerID),
 		slog.Int64("followee_id", followeeID))
-	return follower, nil
+	return followerData, nil
 }
 
-func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) error {
+func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) (err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementDatabaseQueries("delete_follow_relation", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("delete_follow_relation", time.Since(start))
+	}()
+
 	r.log.Info("Deleting follow relation", slog.Int64("follower_id", followerID), slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
@@ -93,7 +107,13 @@ func (r *Repository) Delete(ctx context.Context, followerID, followeeID int64) e
 	return nil
 }
 
-func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, offset int32) ([]int64, int64, error) {
+func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, offset int32) (followers []int64, total int64, err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementDatabaseQueries("get_followers", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("get_followers", time.Since(start))
+	}()
+
 	r.log.Info("Getting followers", slog.Int64("followee_id", followeeID))
 
 	args := pgx.NamedArgs{
@@ -121,18 +141,18 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 	}
 	defer rows.Close()
 
-	followers := make([]int64, 0)
-	var total int64
+	followersList := make([]int64, 0)
+	var totalCount int64
 
 	for rows.Next() {
 		var followerID int64
-		if err := rows.Scan(&followerID, &total); err != nil {
+		if err := rows.Scan(&followerID, &totalCount); err != nil {
 			r.log.Error("Failed to scan follower row",
 				slog.Int64("followee_id", followeeID),
 				slog.String("error", err.Error()))
 			return nil, 0, custom_errors.ErrDatabaseQuery
 		}
-		followers = append(followers, followerID)
+		followersList = append(followersList, followerID)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -142,15 +162,13 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 
-	// If no rows were returned, we need to get the total count separately
-	// since the window function won't execute if there are no matching rows
-	if len(followers) == 0 {
+	if len(followersList) == 0 {
 		countArgs := pgx.NamedArgs{
 			"followee_id": followeeID,
 		}
 
 		countQuery := `SELECT COUNT(*) FROM followers WHERE followee_id = @followee_id`
-		err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
+		err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&totalCount)
 		if err != nil {
 			r.log.Error("Failed to count followers for empty result",
 				slog.Int64("followee_id", followeeID),
@@ -161,12 +179,19 @@ func (r *Repository) GetFollowers(ctx context.Context, followeeID int64, limit, 
 
 	r.log.Info("Successfully retrieved followers",
 		slog.Int64("followee_id", followeeID),
-		slog.Int("count", len(followers)),
-		slog.Int64("total", total))
-	return followers, total, nil
+		slog.Int("count", len(followersList)),
+		slog.Int64("total", totalCount))
+
+	return followersList, totalCount, nil
 }
 
-func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, offset int32) ([]int64, int64, error) {
+func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, offset int32) (followees []int64, total int64, err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementDatabaseQueries("get_followees", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("get_followees", time.Since(start))
+	}()
+
 	r.log.Info("Getting followees", slog.Int64("follower_id", followerID))
 
 	args := pgx.NamedArgs{
@@ -194,18 +219,18 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 	}
 	defer rows.Close()
 
-	followees := make([]int64, 0)
-	var total int64
+	followeesList := make([]int64, 0)
+	var totalCount int64
 
 	for rows.Next() {
 		var followeeID int64
-		if err := rows.Scan(&followeeID, &total); err != nil {
+		if err := rows.Scan(&followeeID, &totalCount); err != nil {
 			r.log.Error("Failed to scan followee row",
 				slog.Int64("follower_id", followerID),
 				slog.String("error", err.Error()))
 			return nil, 0, custom_errors.ErrDatabaseQuery
 		}
-		followees = append(followees, followeeID)
+		followeesList = append(followeesList, followeeID)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -215,15 +240,13 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 		return nil, 0, custom_errors.ErrDatabaseQuery
 	}
 
-	// If no rows were returned, we need to get the total count separately
-	// since the window function won't execute if there are no matching rows
-	if len(followees) == 0 {
+	if len(followeesList) == 0 {
 		countArgs := pgx.NamedArgs{
 			"follower_id": followerID,
 		}
 
 		countQuery := `SELECT COUNT(*) FROM followers WHERE follower_id = @follower_id`
-		err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&total)
+		err := r.db.QueryRow(ctx, countQuery, countArgs).Scan(&totalCount)
 		if err != nil {
 			r.log.Error("Failed to count followees for empty result",
 				slog.Int64("follower_id", followerID),
@@ -234,12 +257,19 @@ func (r *Repository) GetFollowees(ctx context.Context, followerID int64, limit, 
 
 	r.log.Info("Successfully retrieved followees",
 		slog.Int64("follower_id", followerID),
-		slog.Int("count", len(followees)),
-		slog.Int64("total", total))
-	return followees, total, nil
+		slog.Int("count", len(followeesList)),
+		slog.Int64("total", totalCount))
+
+	return followeesList, totalCount, nil
 }
 
-func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (bool, error) {
+func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (exists bool, err error) {
+	start := time.Now()
+	defer func() {
+		r.metrics.IncrementDatabaseQueries("check_follow_relation_exists", err == nil)
+		r.metrics.RecordDatabaseQueryDuration("check_follow_relation_exists", time.Since(start))
+	}()
+
 	r.log.Info("Checking if follow relation exists",
 		slog.Int64("follower_id", followerID),
 		slog.Int64("followee_id", followeeID))
@@ -257,8 +287,8 @@ func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (
 		)
 	`
 
-	var exists bool
-	err := r.db.QueryRow(ctx, query, args).Scan(&exists)
+	var existsResult bool
+	err = r.db.QueryRow(ctx, query, args).Scan(&existsResult)
 	if err != nil {
 		r.log.Error("Failed to check follow relation existence",
 			slog.Int64("follower_id", followerID),
@@ -270,6 +300,6 @@ func (r *Repository) Exists(ctx context.Context, followerID, followeeID int64) (
 	r.log.Info("Follow relation check completed",
 		slog.Int64("follower_id", followerID),
 		slog.Int64("followee_id", followeeID),
-		slog.Bool("exists", exists))
-	return exists, nil
+		slog.Bool("exists", existsResult))
+	return existsResult, nil
 }

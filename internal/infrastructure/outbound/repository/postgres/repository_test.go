@@ -15,6 +15,7 @@ import (
 
 	model "pinstack-relation-service/internal/domain/models"
 	"pinstack-relation-service/internal/infrastructure/logger"
+	"pinstack-relation-service/internal/infrastructure/outbound/metrics/prometheus"
 	repository_postgres "pinstack-relation-service/internal/infrastructure/outbound/repository/postgres"
 	"pinstack-relation-service/mocks"
 
@@ -136,12 +137,13 @@ func TestRepository_Create(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := mocks.NewPgDB(t)
 			log := logger.New("dev")
+			metrics := prometheus.NewPrometheusMetricsProvider()
 
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockDB)
 			}
 
-			repo := repository_postgres.NewFollowRepository(mockDB, log)
+			repo := repository_postgres.NewFollowRepository(mockDB, log, metrics)
 			result, err := repo.Create(context.Background(), tt.followerID, tt.followeeID)
 
 			if tt.wantErr {
@@ -214,12 +216,13 @@ func TestRepository_Delete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := mocks.NewPgDB(t)
 			log := logger.New("dev")
+			metrics := prometheus.NewPrometheusMetricsProvider()
 
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockDB)
 			}
 
-			repo := repository_postgres.NewFollowRepository(mockDB, log)
+			repo := repository_postgres.NewFollowRepository(mockDB, log, metrics)
 			err := repo.Delete(context.Background(), tt.followerID, tt.followeeID)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -417,12 +420,13 @@ func TestRepository_GetFollowers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := mocks.NewPgDB(t)
 			log := logger.New("dev")
+			metrics := prometheus.NewPrometheusMetricsProvider()
 
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockDB)
 			}
 
-			repo := repository_postgres.NewFollowRepository(mockDB, log)
+			repo := repository_postgres.NewFollowRepository(mockDB, log, metrics)
 			got, total, err := repo.GetFollowers(context.Background(), tt.followeeID, tt.limit, tt.offset)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -591,12 +595,13 @@ func TestRepository_GetFollowees(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := mocks.NewPgDB(t)
 			log := logger.New("dev")
+			metrics := prometheus.NewPrometheusMetricsProvider()
 
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockDB)
 			}
 
-			repo := repository_postgres.NewFollowRepository(mockDB, log)
+			repo := repository_postgres.NewFollowRepository(mockDB, log, metrics)
 			got, total, err := repo.GetFollowees(context.Background(), tt.followerID, tt.limit, tt.offset)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -671,12 +676,13 @@ func TestRepository_Exists(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := mocks.NewPgDB(t)
 			log := logger.New("dev")
+			metrics := prometheus.NewPrometheusMetricsProvider()
 
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockDB)
 			}
 
-			repo := repository_postgres.NewFollowRepository(mockDB, log)
+			repo := repository_postgres.NewFollowRepository(mockDB, log, metrics)
 			got, err := repo.Exists(context.Background(), tt.followerID, tt.followeeID)
 			if tt.wantErr {
 				assert.Error(t, err)
