@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,9 +10,11 @@ import (
 	"pinstack-relation-service/internal/application/service"
 	"pinstack-relation-service/internal/infrastructure/config"
 	follow_grpc "pinstack-relation-service/internal/infrastructure/inbound/grpc"
+	metrics_server "pinstack-relation-service/internal/infrastructure/inbound/metrics"
 	infra_logger "pinstack-relation-service/internal/infrastructure/logger"
 	user_adapter "pinstack-relation-service/internal/infrastructure/outbound/client/user"
 	kafka_adapter "pinstack-relation-service/internal/infrastructure/outbound/events/kafka"
+	prometheus_metrics "pinstack-relation-service/internal/infrastructure/outbound/metrics/prometheus"
 	outbox_adapter "pinstack-relation-service/internal/infrastructure/outbound/outbox"
 	repository_postgres "pinstack-relation-service/internal/infrastructure/outbound/repository/postgres"
 	uow_adapter "pinstack-relation-service/internal/infrastructure/outbound/uow"
@@ -50,27 +51,31 @@ func main() {
 	}
 	defer pool.Close()
 
-	kafkaProducer, err := kafka_adapter.NewProducer(cfg.Kafka, log)
+	metricsProvider := prometheus_metrics.NewPrometheusMetricsProvider()
+	metricsProvider.SetServiceHealth(true)
+
+	kafkaProducer, err := kafka_adapter.NewProducer(cfg.Kafka, log, metricsProvider)
 	if err != nil {
 		log.Error("Failed to initialize Kafka producer", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	defer kafkaProducer.Close()
 
-	outboxRepo := outbox_adapter.NewOutboxRepository(pool, log)
+	outboxRepo := outbox_adapter.NewOutboxRepository(pool, log, metricsProvider)
 
 	outboxWorker := outbox_adapter.NewOutboxWorker(
 		outboxRepo,
 		kafkaProducer,
 		cfg.Outbox,
 		log,
+		metricsProvider,
 	)
 
 	outboxWorker.Start(ctx)
 	defer outboxWorker.Stop()
 
-	unitOfWork := uow_adapter.NewPostgresUOW(pool, log)
-	followRepo := repository_postgres.NewFollowRepository(pool, log)
+	unitOfWork := uow_adapter.NewPostgresUOW(pool, log, metricsProvider)
+	followRepo := repository_postgres.NewFollowRepository(pool, log, metricsProvider)
 
 	userServiceConn, err := grpc.NewClient(
 		fmt.Sprintf("%s:%d", cfg.UserService.Address, cfg.UserService.Port),
@@ -91,13 +96,9 @@ func main() {
 
 	followService := service.NewFollowService(log, followRepo, unitOfWork, userClient)
 	followGRPCApi := follow_grpc.NewFollowGRPCService(followService, log)
-	grpcServer := follow_grpc.NewServer(followGRPCApi, cfg.GRPCServer.Address, cfg.GRPCServer.Port, log)
+	grpcServer := follow_grpc.NewServer(followGRPCApi, cfg.GRPCServer.Address, cfg.GRPCServer.Port, log, metricsProvider)
 
-	metricsAddr := fmt.Sprintf("%s:%d", cfg.Prometheus.Address, cfg.Prometheus.Port)
-	metricsServer := &http.Server{
-		Addr:    metricsAddr,
-		Handler: nil,
-	}
+	metricsServer := metrics_server.NewMetricsServer(cfg.Prometheus.Address, cfg.Prometheus.Port, log)
 
 	done := make(chan bool, 1)
 	metricsDone := make(chan bool, 1)
@@ -111,8 +112,7 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
-		log.Info("Starting Prometheus metrics server", slog.String("address", metricsAddr))
-		if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := metricsServer.Run(); err != nil {
 			log.Error("Prometheus metrics server error", slog.String("error", err.Error()))
 		}
 		metricsDone <- true

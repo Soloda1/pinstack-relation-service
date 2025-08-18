@@ -18,9 +18,10 @@ type Producer struct {
 	producer *kafka.Producer
 	topic    string
 	logger   ports.Logger
+	metrics  ports.MetricsProvider
 }
 
-func NewProducer(kafkaConfig config.Kafka, logger ports.Logger) (*Producer, error) {
+func NewProducer(kafkaConfig config.Kafka, logger ports.Logger, metrics ports.MetricsProvider) (*Producer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers": kafkaConfig.Brokers,
 		// Настройки надежности доставки
@@ -47,6 +48,7 @@ func NewProducer(kafkaConfig config.Kafka, logger ports.Logger) (*Producer, erro
 		producer: p,
 		topic:    kafkaConfig.Topic,
 		logger:   logger,
+		metrics:  metrics,
 	}, nil
 }
 
@@ -55,6 +57,11 @@ func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) <-c
 
 	go func() {
 		defer close(resultChan)
+
+		var err error
+		defer func() {
+			p.metrics.IncrementKafkaMessages(p.topic, "send", err == nil)
+		}()
 
 		payload, err := json.Marshal(event.Payload)
 		if err != nil {
@@ -98,21 +105,24 @@ func (p *Producer) SendMessage(ctx context.Context, event model.OutboxEvent) <-c
 
 		select {
 		case <-ctx.Done():
-			resultChan <- kafka_port.SendResult{EventID: event.ID, Error: ctx.Err()}
+			err = ctx.Err()
+			resultChan <- kafka_port.SendResult{EventID: event.ID, Error: err}
 		case e := <-deliveryChan:
 			m, ok := e.(*kafka.Message)
 			if !ok {
 				p.logger.Error("Unexpected event type received on delivery channel",
 					slog.String("event_type", fmt.Sprintf("%T", e)),
 					slog.Int64("event_id", event.ID))
-				resultChan <- kafka_port.SendResult{EventID: event.ID, Error: custom_errors.ErrUnexpectedEventType}
+				err = custom_errors.ErrUnexpectedEventType
+				resultChan <- kafka_port.SendResult{EventID: event.ID, Error: err}
 				return
 			}
 			if m.TopicPartition.Error != nil {
 				p.logger.Error("Message delivery failed",
 					slog.String("error", m.TopicPartition.Error.Error()),
 					slog.Int64("event_id", event.ID))
-				resultChan <- kafka_port.SendResult{EventID: event.ID, Error: m.TopicPartition.Error}
+				err = m.TopicPartition.Error
+				resultChan <- kafka_port.SendResult{EventID: event.ID, Error: err}
 			} else {
 				p.logger.Info("Message delivered successfully",
 					slog.Int64("event_id", event.ID),

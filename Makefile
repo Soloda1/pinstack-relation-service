@@ -1,16 +1,30 @@
-.PHONY: test test-unit test-integration test-user-integration clean build run docker-build setup-system-tests
+.PHONY: test test-unit test-integration test-relation-integration clean build run docker-build setup-system-tests setup-monitoring start-monitoring start-prometheus-stack start-elk-stack stop-monitoring clean-monitoring check-monitoring-health logs-prometheus logs-grafana logs-loki logs-elasticsearch logs-kibana start-dev-full stop-dev-full clean-dev-full start-dev-light
 
 BINARY_NAME=relation-service
 DOCKER_IMAGE=pinstack-relation-service:latest
 GO_VERSION=1.24.2
 SYSTEM_TESTS_DIR=../pinstack-system-tests
 SYSTEM_TESTS_REPO=https://github.com/Soloda1/pinstack-system-tests.git
+MONITORING_DIR=../pinstack-monitoring-service
+MONITORING_REPO=https://github.com/Soloda1/pinstack-monitoring-service.git
 
 # Проверка версии Go
 check-go-version:
 	@echo "🔍 Проверка версии Go..."
 	@go version | grep -q "go$(GO_VERSION)" || (echo "❌ Требуется Go $(GO_VERSION)" && exit 1)
 	@echo "✅ Go $(GO_VERSION) найден"
+
+# Настройка monitoring репозитория
+setup-monitoring:
+	@echo "🔄 Проверка monitoring репозитория..."
+	@if [ ! -d "$(MONITORING_DIR)" ]; then \
+		echo "📥 Клонирование pinstack-monitoring-service..."; \
+		git clone $(MONITORING_REPO) $(MONITORING_DIR); \
+	else \
+		echo "🔄 Обновление pinstack-monitoring-service..."; \
+		cd $(MONITORING_DIR) && git pull origin main; \
+	fi
+	@echo "✅ Monitoring готов"
 
 # Настройка system tests репозитория
 setup-system-tests:
@@ -40,6 +54,9 @@ test-unit: check-go-version
 # Запуск полной инфраструктуры для интеграционных тестов из существующего docker-compose
 start-relation-infrastructure: setup-system-tests
 	@echo "🚀 Запуск полной инфраструктуры для интеграционных тестов..."
+	@echo "🔍 Проверка и создание сетей..."
+	@docker network create pinstack 2>/dev/null || true
+	@docker network create pinstack-test 2>/dev/null || true
 	cd $(SYSTEM_TESTS_DIR) && \
 	RELATION_SERVICE_CONTEXT=../pinstack-relation-service docker compose -f docker-compose.test.yml up -d \
 		user-db-test \
@@ -56,7 +73,8 @@ start-relation-infrastructure: setup-system-tests
 		kafka-topics-init-test \
 		relation-db-test \
 		relation-migrator-test \
-		relation-service-test
+		relation-service-test \
+		redis
 	@echo "⏳ Ожидание готовности сервисов..."
 	@sleep 30
 
@@ -67,7 +85,8 @@ check-services:
 	@docker exec pinstack-auth-db-test pg_isready -U postgres || (echo "❌ Auth база данных не готова" && exit 1)
 	@docker exec pinstack-relation-db-test pg_isready -U postgres || (echo "❌ Relation база данных не готова" && exit 1)
 	@docker exec pinstack-notification-db-test pg_isready -U postgres || (echo "❌ Notification база данных не готова" && exit 1)
-	@echo "✅ Базы данных готовы"
+	@timeout 30 bash -c 'until docker exec pinstack-redis-test redis-cli ping | grep -q PONG; do echo "⏳ Ожидание Redis..."; sleep 2; done' || (echo "❌ Redis не готов" && exit 1)
+	@echo "✅ Базы данных и Redis готовы"
 	@echo "=== User Service logs ==="
 	@docker logs pinstack-user-service-test --tail=10
 	@echo "=== Auth Service logs ==="
@@ -80,9 +99,11 @@ check-services:
 	@docker logs pinstack-api-gateway-test --tail=10
 	@echo "=== Kafka logs ==="
 	@docker logs pinstack-kafka-test --tail=5
+	@echo "=== Redis logs ==="
+	@docker logs pinstack-redis-test --tail=5
 
 # Интеграционные тесты только для relation service
-test-relation-integration: start-relation-infrastructure check-services
+test-relation-integration: check-services
 	@echo "🧪 Запуск интеграционных тестов для Relation Service..."
 	cd $(SYSTEM_TESTS_DIR) && \
 	go test -v -count=1 -timeout=10m ./internal/scenarios/integration/gateway_relation/...
@@ -106,7 +127,8 @@ stop-relation-infrastructure:
 		auth-db-test \
 		user-service-test \
 		user-migrator-test \
-		user-db-test
+		user-db-test \
+		redis
 	cd $(SYSTEM_TESTS_DIR) && \
 	docker compose -f docker-compose.test.yml rm -f \
 		api-gateway-test \
@@ -123,7 +145,8 @@ stop-relation-infrastructure:
 		auth-db-test \
 		user-service-test \
 		user-migrator-test \
-		user-db-test
+		user-db-test \
+		redis
 
 # Полная очистка (включая volumes)
 clean-relation-infrastructure:
@@ -138,7 +161,7 @@ clean-relation-infrastructure:
 	@echo "✅ Полная очистка завершена"
 
 # Полные интеграционные тесты (с очисткой)
-test-integration: test-relation-integration stop-relation-infrastructure
+test-integration: start-relation-infrastructure test-relation-integration stop-relation-infrastructure
 
 # Все тесты
 test-all: fmt lint test-unit test-integration
@@ -184,17 +207,45 @@ logs-auth-db:
 	cd $(SYSTEM_TESTS_DIR) && \
 	docker compose -f docker-compose.test.yml logs -f auth-db-test
 
+logs-redis:
+	cd $(SYSTEM_TESTS_DIR) && \
+	docker compose -f docker-compose.test.yml logs -f redis
+
+# Redis утилиты для отладки
+redis-cli:
+	@echo "🔍 Подключение к Redis CLI..."
+	docker exec -it pinstack-redis-test redis-cli
+
+redis-info:
+	@echo "📊 Информация о Redis..."
+	docker exec pinstack-redis-test redis-cli info
+
+redis-keys:
+	@echo "🔑 Все ключи в Redis..."
+	docker exec pinstack-redis-test redis-cli keys "*"
+
+redis-flush:
+	@echo "🧹 Очистка всех данных Redis..."
+	@read -p "Очистить все данные Redis? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	docker exec pinstack-redis-test redis-cli flushall
+	@echo "✅ Redis очищен"
+
 # Быстрый тест с локальным relation-service
 quick-test-local: setup-system-tests
 	@echo "⚡ Быстрый запуск тестов с локальным relation-service..."
+	@echo "🔍 Проверка и создание сетей..."
+	@docker network create pinstack 2>/dev/null || true
+	@docker network create pinstack-test 2>/dev/null || true
 	cd $(SYSTEM_TESTS_DIR) && \
 	RELATION_SERVICE_CONTEXT=../pinstack-relation-service docker compose -f docker-compose.test.yml up -d \
 		user-db-test user-migrator-test user-service-test \
 		auth-db-test auth-migrator-test auth-service-test \
 		api-gateway-test notification-db-test notification-migrator-test notification-service-test \
-		kafka-test kafka-topics-init-test relation-db-test relation-migrator-test relation-service-test
+		kafka-test kafka-topics-init-test relation-db-test relation-migrator-test relation-service-test \
+		redis
 	@echo "⏳ Ожидание готовности сервисов..."
 	@sleep 30
+	@timeout 30 bash -c 'until docker exec pinstack-redis-test redis-cli ping | grep -q PONG; do echo "⏳ Ожидание Redis..."; sleep 2; done'
 	cd $(SYSTEM_TESTS_DIR) && \
 	go test -v -count=1 -timeout=5m ./internal/scenarios/integration/gateway_relation/...
 	$(MAKE) stop-relation-infrastructure
@@ -230,3 +281,170 @@ quick-test: start-relation-infrastructure
 	cd $(SYSTEM_TESTS_DIR) && \
 	go test -v -count=1 -timeout=5m ./internal/scenarios/integration/gateway_relation/...
 	$(MAKE) stop-relation-infrastructure
+
+######################
+# Monitoring Stack   #
+######################
+
+# Запуск полного monitoring stack
+start-monitoring: setup-monitoring
+	@echo "📊 Запуск monitoring stack..."
+	@echo "🔍 Проверка и создание сетей..."
+	@docker network create pinstack 2>/dev/null || true
+	@docker network create pinstack-test 2>/dev/null || true
+	cd $(MONITORING_DIR) && \
+	docker compose up -d
+	@echo "⏳ Ожидание готовности monitoring сервисов..."
+	@sleep 15
+	@echo "✅ Monitoring stack запущен:"
+	@echo "  📊 Prometheus: http://localhost:9090"
+	@echo "  📈 Grafana: http://localhost:3000 (admin/admin)"
+	@echo "  🔍 Loki: http://localhost:3100"
+	@echo "  📋 Kibana: http://localhost:5601"
+	@echo "  💾 Elasticsearch: http://localhost:9200"
+	@echo "  🐧 PgAdmin: http://localhost:5050 (admin@admin.com/admin)"
+	@echo "  🐛 Kafka UI: http://localhost:9091"
+
+# Запуск только Prometheus stack (Prometheus + Grafana + Loki)
+start-prometheus-stack: setup-monitoring
+	@echo "📊 Запуск Prometheus stack..."
+	@echo "🔍 Проверка и создание сетей..."
+	@docker network create pinstack 2>/dev/null || true
+	@docker network create pinstack-test 2>/dev/null || true
+	cd $(MONITORING_DIR) && \
+	docker compose up -d prometheus grafana loki promtail
+	@echo "⏳ Ожидание готовности Prometheus stack..."
+	@sleep 10
+	@echo "✅ Prometheus stack запущен:"
+	@echo "  📊 Prometheus: http://localhost:9090"
+	@echo "  📈 Grafana: http://localhost:3000 (admin/admin)"
+	@echo "  🔍 Loki: http://localhost:3100"
+
+# Запуск только ELK stack
+start-elk-stack: setup-monitoring
+	@echo "📊 Запуск ELK stack..."
+	@echo "🔍 Проверка и создание сетей..."
+	@docker network create pinstack 2>/dev/null || true
+	@docker network create pinstack-test 2>/dev/null || true
+	cd $(MONITORING_DIR) && \
+	docker compose up -d elasticsearch logstash kibana filebeat
+	@echo "⏳ Ожидание готовности ELK stack..."
+	@sleep 30
+	@echo "✅ ELK stack запущен:"
+	@echo "  📋 Kibana: http://localhost:5601"
+	@echo "  💾 Elasticsearch: http://localhost:9200"
+
+# Проверка состояния monitoring сервисов
+check-monitoring-health:
+	@echo "🔍 Проверка состояния monitoring сервисов..."
+	@echo "Prometheus:" && curl -s http://localhost:9090/-/healthy | head -1 || echo "❌ Prometheus недоступен"
+	@echo "Grafana:" && curl -s http://localhost:3000/api/health | head -1 || echo "❌ Grafana недоступна"
+	@echo "Loki:" && curl -s http://localhost:3100/ready | head -1 || echo "❌ Loki недоступен"
+	@echo "Elasticsearch:" && curl -s http://localhost:9200/_cluster/health | head -1 || echo "❌ Elasticsearch недоступен"
+	@echo "Kibana:" && curl -s http://localhost:5601/api/status | head -1 || echo "❌ Kibana недоступна"
+
+# Остановка monitoring stack
+stop-monitoring:
+	@echo "🛑 Остановка monitoring stack..."
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose stop; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+# Полная очистка monitoring stack
+clean-monitoring:
+	@echo "🧹 Очистка monitoring stack..."
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose down -v; \
+		echo "🧹 Очистка monitoring volumes..."; \
+		docker volume rm pinstack-monitoring-service_elasticsearch_data 2>/dev/null || true; \
+		docker volume rm pinstack-monitoring-service_filebeat_data 2>/dev/null || true; \
+		echo "✅ Monitoring stack очищен"; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+# Логи monitoring сервисов
+logs-prometheus:
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose logs -f prometheus; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+logs-grafana:
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose logs -f grafana; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+logs-loki:
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose logs -f loki; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+logs-elasticsearch:
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose logs -f elasticsearch; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+logs-kibana:
+	@if [ -d "$(MONITORING_DIR)" ]; then \
+		cd $(MONITORING_DIR) && docker compose logs -f kibana; \
+	else \
+		echo "⚠️  Monitoring директория не найдена"; \
+	fi
+
+# Комбинированные команды
+
+# Полный development environment с мониторингом
+start-dev-full: setup-monitoring start-monitoring start-relation-infrastructure
+	@echo "🚀 Полная dev среда запущена!"
+	@echo ""
+	@echo "=== Приложения ==="
+	@echo "  🔗 API Gateway: http://localhost:8080"
+	@echo "  👤 User Service: http://localhost:8081"
+	@echo "  🔐 Auth Service: http://localhost:8082"
+	@echo "  💕 Relation Service: http://localhost:8083"
+	@echo "  📢 Notification Service: http://localhost:8084"
+	@echo ""
+	@echo "=== Мониторинг ==="
+	@echo "  📊 Prometheus: http://localhost:9090"
+	@echo "  📈 Grafana: http://localhost:3000 (admin/admin)"
+	@echo "  🔍 Loki: http://localhost:3100"
+	@echo "  📋 Kibana: http://localhost:5601"
+	@echo ""
+	@echo "=== Базы данных ==="
+	@echo "  🐧 PgAdmin: http://localhost:5050 (admin@admin.com/admin)"
+	@echo "  🔴 Redis: localhost:6379"
+	@echo "  🐛 Kafka UI: http://localhost:9091"
+
+# Остановка всей dev среды
+stop-dev-full: stop-monitoring stop-relation-infrastructure
+	@echo "🛑 Полная dev среда остановлена"
+
+# Очистка всей dev среды
+clean-dev-full: clean-monitoring clean-relation-infrastructure
+	@echo "🧹 Полная dev среда очищена"
+
+# Запуск только с Prometheus stack (без ELK)
+start-dev-light: setup-monitoring start-prometheus-stack start-relation-infrastructure
+	@echo "🚀 Легкая dev среда запущена (без ELK stack)!"
+	@echo ""
+	@echo "=== Приложения ==="
+	@echo "  🔗 API Gateway"
+	@echo "  👤 User Service"
+	@echo "  🔐 Auth Service"
+	@echo "  💕 Relation Service"
+	@echo "  📢 Notification Service"
+	@echo ""
+	@echo "=== Мониторинг ==="
+	@echo "  📊 Prometheus: http://localhost:9090"
+	@echo "  📈 Grafana: http://localhost:3000 (admin/admin)"
+	@echo "  🔍 Loki: http://localhost:3100"
