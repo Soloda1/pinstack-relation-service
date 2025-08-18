@@ -23,14 +23,16 @@ type Server struct {
 	address           string
 	port              int
 	log               ports.Logger
+	metrics           ports.MetricsProvider
 }
 
-func NewServer(grpcServer *FollowGRPCService, address string, port int, log ports.Logger) *Server {
+func NewServer(grpcServer *FollowGRPCService, address string, port int, log ports.Logger, metrics ports.MetricsProvider) *Server {
 	return &Server{
 		followGRPCService: grpcServer,
 		address:           address,
 		port:              port,
 		log:               log,
+		metrics:           metrics,
 	}
 }
 
@@ -51,6 +53,7 @@ func (s *Server) Run() error {
 	s.server = grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			middleware.UnaryLoggerInterceptor(s.log),
+			middleware.UnaryMetricsInterceptor(s.metrics),
 			grpc_recovery.UnaryServerInterceptor(opts...),
 		)),
 	)
